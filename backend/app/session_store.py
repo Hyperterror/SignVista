@@ -11,6 +11,8 @@ For production, replace with Redis or a database.
 import time
 import uuid
 import random
+import json
+import os
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,7 +21,7 @@ from app.config import settings
 from passlib.context import CryptContext
 
 # ─── Auth Setup ──────────────────────────────────────────────────
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -29,6 +31,26 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 # Persistent global users (in-memory mock database)
 USERS: Dict[str, Dict[str, Any]] = {}
+USERS_DB_PATH = "users_db.json"
+
+def save_users():
+    try:
+        with open(USERS_DB_PATH, "w") as f:
+            json.dump(USERS, f, indent=4)
+    except Exception as e:
+        print(f"Error saving users: {e}")
+
+def load_users():
+    global USERS
+    if os.path.exists(USERS_DB_PATH):
+        try:
+            with open(USERS_DB_PATH, "r") as f:
+                USERS = json.load(f)
+        except Exception as e:
+            print(f"Error loading users: {e}")
+
+# Initial load
+load_users()
 
 
 # ─── Constants ───────────────────────────────────────────────────
@@ -542,6 +564,7 @@ def register_user(data: Dict[str, Any]) -> Tuple[bool, str, Optional[UserSession
     }
     
     USERS[phone] = user_entry
+    save_users()
     
     # Create a session tied to this user
     session = get_session(user_id)

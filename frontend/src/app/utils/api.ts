@@ -3,7 +3,7 @@
  * Handles communication with the FastAPI backend.
  */
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 class ApiService {
     private sessionId: string;
@@ -31,6 +31,29 @@ class ApiService {
         return this.sessionId;
     }
 
+    private async handleResponse(response: Response, endpoint: string) {
+        if (response.status === 401) {
+            // Don't redirect if we are already trying to login or register
+            if (endpoint.includes('/auth/login') || endpoint.includes('/auth/register')) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Invalid credentials');
+            }
+
+            // Unauthorized - token is likely invalid or expired for other protected routes
+            this.setSession('guest_' + Math.random().toString(36).substring(2, 11), null);
+            if (typeof window !== 'undefined') {
+                window.location.href = '/auth';
+            }
+            throw new Error('Unauthorized - redirects to login');
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `API Error: ${response.statusText}`);
+        }
+        return response.json();
+    }
+
     async get(endpoint: string) {
         const headers: any = {};
         if (this.token) {
@@ -38,8 +61,7 @@ class ApiService {
         }
 
         const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers });
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        return response.json();
+        return this.handleResponse(response, endpoint);
     }
 
     async post(endpoint: string, data: any) {
@@ -53,8 +75,7 @@ class ApiService {
             headers,
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        return response.json();
+        return this.handleResponse(response, endpoint);
     }
 
     // Feature Endpoints
