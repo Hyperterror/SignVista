@@ -71,7 +71,7 @@ export default function DashboardPage() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-gray-900">
                 <div className="w-16 h-16 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 font-medium">Preparing your SignBridge dashboard...</p>
+                <p className="text-gray-600 dark:text-gray-400 font-medium">Preparing your SignVista dashboard...</p>
             </div>
         );
     }
@@ -84,7 +84,7 @@ export default function DashboardPage() {
                 {/* Welcome Header */}
                 <div className="mb-12">
                     <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                        SignBridge Hub
+                        SignVista Hub
                     </h1>
                     <p className="text-xl text-gray-600 dark:text-gray-400">
                         Track your progress and master ISL step by step
