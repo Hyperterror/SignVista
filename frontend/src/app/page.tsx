@@ -1,202 +1,184 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Zap, Sparkles } from 'lucide-react';
-
-gsap.registerPlugin(ScrollTrigger);
+import {
+  Type,
+  Mic,
+  Sparkles,
+  Search,
+  BookOpen,
+  Users,
+  Trophy,
+  Moon,
+  Sun,
+  User as UserIcon,
+  Hand
+} from 'lucide-react';
+import { QuickAR } from './components/QuickAR';
+import { CompactStats } from './components/CompactStats';
+import { api } from './utils/api';
+import { useTheme } from './context/ThemeContext';
+import { toast } from 'sonner';
 
 export default function HomePage() {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const featuresRef = useRef<HTMLDivElement>(null);
+  const { theme, toggleTheme } = useTheme();
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const tl = gsap.timeline();
-
-    tl.fromTo('.hero-title', { y: 100, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out' })
-      .fromTo('.hero-subtitle', { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out' }, '-=0.6')
-      .fromTo('.hero-cta', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: 'back.out(1.7)' }, '-=0.4');
-
-    gsap.to('.float-element', {
-      y: -20, duration: 2, ease: 'power1.inOut', yoyo: true, repeat: -1, stagger: 0.3
-    });
-
-    const featureCards = document.querySelectorAll('.feature-card');
-    featureCards.forEach((card) => {
-      gsap.fromTo(card,
-        { y: 100, opacity: 0, rotateX: -15, scale: 0.9 },
-        {
-          y: 0, opacity: 1, rotateX: 0, scale: 1, duration: 0.8, ease: 'power3.out',
-          scrollTrigger: { trigger: card, start: 'top 80%', end: 'top 50%', scrub: 1 },
-        }
-      );
-
-      const cardElement = card as HTMLElement;
-      cardElement.addEventListener('mouseenter', () => {
-        gsap.to(card, { y: -10, scale: 1.02, boxShadow: '0 20px 60px rgba(52, 76, 61, 0.25)', duration: 0.3, ease: 'power2.out' });
-      });
-      cardElement.addEventListener('mouseleave', () => {
-        gsap.to(card, { y: 0, scale: 1, boxShadow: '0 10px 30px rgba(52, 76, 61, 0.08)', duration: 0.3, ease: 'power2.out' });
-      });
-    });
-
-    return () => { ScrollTrigger.getAll().forEach(trigger => trigger.kill()); };
+    const fetchDashboard = async () => {
+      try {
+        const data = await api.getDashboard();
+        setDashboardData(data);
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDashboard();
   }, []);
 
-  const features = [
-    {
-      icon: <Zap className="w-8 h-8" />,
-      title: "Real-time Translation",
-      description: "Convert text and voice to ISL instantly with AI-powered translation",
-      gradientStyle: { background: 'linear-gradient(135deg, #105F68, #344C3D)' }
-    },
-    {
-      icon: <Sparkles className="w-8 h-8" />,
-      title: "AI-Powered Accuracy",
-      description: "Advanced AI ensures 95% accuracy in sign language conversion",
-      gradientStyle: { background: 'linear-gradient(135deg, #738A6E, #3A9295)' }
-    }
-  ];
-
-  const stats = [
-    { value: "1000+", label: "ISL Signs" },
-    { value: "50K+", label: "Users Served" },
-    { value: "95%", label: "Accuracy" },
-    { value: "24/7", label: "Available" }
-  ];
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0a0a0a]">
+        <div className="w-12 h-12 border-4 border-[#105F68] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-white via-[#BFCFBB]/8 to-[#C8E6E2]/10 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900">
-          <div className="absolute top-20 left-20 w-96 h-96 rounded-full blur-3xl animate-pulse" style={{ background: 'rgba(158, 213, 209, 0.12)' }} />
-          <div className="absolute bottom-20 right-20 w-96 h-96 rounded-full blur-3xl animate-pulse" style={{ background: 'rgba(191, 207, 187, 0.12)' }} />
-        </div>
+    <div className="min-h-screen bg-[#F8FAFA] dark:bg-[#0a0a0a] transition-colors duration-500 p-6 lg:p-10">
+      <div className="max-w-[1600px] mx-auto space-y-10">
 
-        <div className="relative z-10 max-w-5xl mx-auto text-center">
-          <div className="absolute -top-20 -left-20 text-8xl opacity-20 float-element">👋</div>
-          <div className="absolute -top-10 -right-10 text-6xl opacity-20 float-element">🤟</div>
-          <div className="absolute -bottom-10 left-10 text-7xl opacity-20 float-element">👍</div>
-
-          <h1 className="hero-title text-6xl md:text-8xl font-bold mb-6 bg-clip-text text-transparent"
-            style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295, #105F68)' }}
-          >
-            SignVista
-          </h1>
-
-          <p className="hero-subtitle text-2xl md:text-3xl text-gray-700 dark:text-gray-300 mb-4">
-            Indian Sign Language, Simplified
-          </p>
-
-          <p className="hero-subtitle text-lg text-gray-600 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            AI-powered platform for translating text and voice into ISL gestures instantly
-          </p>
-
-          <div className="hero-cta flex flex-wrap gap-4 justify-center">
-            <Link
-              href="/text-to-sign"
-              className="group px-8 py-4 text-white rounded-2xl font-semibold shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #344C3D, #105F68)' }}
-            >
-              Start Converting
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform duration-300" />
-            </Link>
-
-            <Link
-              href="/voice-to-sign"
-              className="px-8 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl font-semibold shadow-lg hover:shadow-2xl transition-all duration-300 border-2"
-              style={{ borderColor: '#9ED5D1' }}
-            >
-              Voice to Sign
-            </Link>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 max-w-4xl mx-auto">
-            {stats.map((stat, index) => (
-              <div key={index} className="stat-card p-6 rounded-2xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-lg">
-                <div className="text-4xl font-bold bg-clip-text text-transparent"
-                  style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295)' }}
-                >
-                  {stat.value}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">{stat.label}</div>
+        {/* Header Section */}
+        <header className="flex justify-between items-start">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
+                HI {dashboardData?.user_name?.toUpperCase() || 'USER'}
+              </h1>
+              <div className="bg-[#105F68] text-white px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
+                ISL GREETING ACTIVE
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section ref={featuresRef} className="py-20 px-6 bg-white dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4 bg-clip-text text-transparent"
-              style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #105F68)' }}
-            >
-              Powerful Features
-            </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400">
-              Everything you need for Indian Sign Language translation
-            </p>
+            </div>
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 font-medium italic">
+              <Hand className="w-5 h-5 text-[#3A9295]" />
+              <span>"HI {dashboardData?.user_name || 'User'}" in sign language variant</span>
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            {features.map((feature, index) => (
-              <div
-                key={index}
-                className="feature-card relative p-8 rounded-3xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden group cursor-pointer"
-                style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
+        </header>
+
+        {/* Central Layout */}
+        <div className="grid lg:grid-cols-4 gap-8">
+
+          {/* Main AR Box */}
+          <div className="lg:col-span-3 space-y-6">
+            <div className="flex items-center justify-between px-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                Welcome to SignBridge <Sparkles className="w-5 h-5 text-[#3A9295]" />
+              </h2>
+            </div>
+
+            <div className="aspect-[16/9] lg:aspect-auto lg:h-[550px]">
+              <QuickAR />
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Link
+                href="/text"
+                className="group flex items-center justify-between p-6 bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl hover:shadow-2xl transition-all border border-transparent hover:border-[#105F68]/30"
               >
-                {/* Gradient overlay */}
-                <div className="absolute top-0 right-0 w-32 h-32 opacity-10 rounded-bl-full" style={feature.gradientStyle} />
-
-                {/* Icon */}
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300" style={feature.gradientStyle}>
-                  {feature.icon}
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center text-violet-600">
+                    <Type className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-gray-900 dark:text-gray-100">TEXT TO SIGN</h3>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Instant Conversion</p>
+                  </div>
                 </div>
-
-                <h3 className="text-2xl font-bold mb-3 text-gray-900 dark:text-gray-100">{feature.title}</h3>
-                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{feature.description}</p>
-
-                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <Sparkles className="w-6 h-6" style={{ color: '#63C1BB' }} />
+                <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-700 flex items-center justify-center group-hover:bg-[#105F68] group-hover:text-white transition-colors">
+                  <Hand className="w-5 h-5" />
                 </div>
+              </Link>
+
+              <Link
+                href="/voice"
+                className="group flex items-center justify-between p-6 bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl hover:shadow-2xl transition-all border border-transparent hover:border-[#3A9295]/30"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600">
+                    <Mic className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-gray-900 dark:text-gray-100">VOICE TO SIGN</h3>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Real-time Recognition</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-700 flex items-center justify-center group-hover:bg-[#3A9295] group-hover:text-white transition-colors">
+                  <Mic className="w-5 h-5" />
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Features Side Column */}
+          <div className="space-y-6">
+            <div className="bg-[#105F68] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group">
+              <div className="absolute -right-8 -bottom-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
+                <Sparkles className="w-48 h-48" />
               </div>
-            ))}
+              <h3 className="text-2xl font-black mb-4 relative z-10 leading-tight">EXPLORE OUR FEATURES</h3>
+              <p className="text-sm opacity-80 mb-8 relative z-10 leading-relaxed font-medium">
+                Bridge the communication gap with ISL. Learn, search, and connect with the deaf community through our specialized tools.
+              </p>
+
+              <div className="space-y-4 relative z-10">
+                <Link href="/dictionary" className="flex items-center gap-3 p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors border border-white/10">
+                  <Search className="w-5 h-5" />
+                  <span className="font-bold text-sm">ISL Dictionary</span>
+                </Link>
+                <Link href="/learning" className="flex items-center gap-3 p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors border border-white/10">
+                  <BookOpen className="w-5 h-5" />
+                  <span className="font-bold text-sm">Learning Path</span>
+                </Link>
+                <Link href="/game" className="flex items-center gap-3 p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors border border-white/10">
+                  <Trophy className="w-5 h-5" />
+                  <span className="font-bold text-sm">Sign Quiz Rush</span>
+                </Link>
+                <Link href="/community" className="flex items-center gap-3 p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors border border-white/10">
+                  <Users className="w-5 h-5" />
+                  <span className="font-bold text-sm">ISL Community</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Daily Tip */}
+            <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-700 shadow-xl">
+              <h4 className="text-[#105F68] font-black tracking-widest text-[10px] mb-4 uppercase">Daily Sign Tip</h4>
+              <p className="text-gray-600 dark:text-gray-400 text-sm font-medium leading-relaxed">
+                "When signing names, ensure your dominant hand is clear and your movements are crisp."
+              </p>
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-6 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #105F68, #3A9295, #344C3D)' }}
-      >
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-10 left-10 text-9xl">👋</div>
-          <div className="absolute bottom-10 right-10 text-9xl">🤟</div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl">✌️</div>
-        </div>
+        {/* Analytics Footer Section */}
+        <footer className="pt-6 border-t border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tighter">Your Progress Insights</h2>
+            <Link href="/dashboard" className="text-sm font-bold text-[#105F68] hover:underline flex items-center gap-1">
+              Full Analytics <Sparkles className="w-4 h-4" />
+            </Link>
+          </div>
+          {dashboardData && <CompactStats data={dashboardData} />}
+        </footer>
 
-        <div className="relative z-10 max-w-4xl mx-auto text-center text-white">
-          <h2 className="text-5xl font-bold mb-6">Ready to Start Your ISL Journey?</h2>
-          <p className="text-xl mb-8 opacity-90">
-            Make communication accessible for everyone with AI-powered ISL translation
-          </p>
-          <Link
-            href="/text-to-sign"
-            className="inline-flex items-center gap-2 px-10 py-5 bg-white rounded-2xl font-bold text-lg shadow-2xl hover:scale-105 transition-transform duration-300"
-            style={{ color: '#344C3D' }}
-          >
-            Get Started Free
-            <ArrowRight className="w-6 h-6" />
-          </Link>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

@@ -7,202 +7,149 @@ import { useTheme } from '../context/ThemeContext';
 import gsap from 'gsap';
 import {
   Home,
-  MessageSquare,
+  LayoutDashboard,
+  BookOpen,
+  Search,
+  Users,
+  Camera,
+  Type,
   Mic,
+  Star,
+  User,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Award,
+  Trophy,
+  Activity,
+  Menu,
+  X,
   Sun,
   Moon,
-  Hand,
-  Menu,
-  X
+  Hand
 } from 'lucide-react';
 
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
-  const greetingRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Typing effect for greeting
-    if (greetingRef.current) {
-      const text = "Hey, Explorer!";
-      const chars = text.split('');
-      greetingRef.current.innerHTML = '';
-
-      chars.forEach((char, i) => {
-        const span = document.createElement('span');
-        span.textContent = char;
-        span.style.opacity = '0';
-        greetingRef.current?.appendChild(span);
-
-        gsap.to(span, {
-          opacity: 1,
-          duration: 0.1,
-          delay: i * 0.05,
-          ease: 'power1.out'
-        });
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    // Subtle parallax effect on scroll
-    const handleScroll = () => {
-      if (sidebarRef.current) {
-        const scrollY = window.scrollY;
-        gsap.to(sidebarRef.current, {
-          y: scrollY * 0.1,
-          duration: 0.5,
-          ease: 'power2.out'
-        });
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const navItems = [
     { path: '/', icon: Home, label: 'Home', gesture: '🏠' },
-    { path: '/text-to-sign', icon: MessageSquare, label: 'Text → Sign', gesture: '✍️' },
-    { path: '/voice-to-sign', icon: Mic, label: 'Voice → Sign', gesture: '🎤' },
+    { path: '/profile', icon: User, label: 'Profile', gesture: '👤' },
+    { path: '/game', icon: Trophy, label: 'ISL Quiz Game', gesture: '🎮' },
+    { path: '/learning', icon: BookOpen, label: 'Learning Hub', gesture: '📚' },
+    { path: '/dictionary', icon: Search, label: 'ISL Dictionary', gesture: '🔎' },
+    { path: '/community', icon: Users, label: 'Community', gesture: '🤝' },
+    { path: '/translate', icon: Camera, label: 'AR Translate', gesture: '📸' },
+    { path: '/text', icon: Type, label: 'Text to Sign', gesture: '✍️' },
+    { path: '/voice', icon: Mic, label: 'Voice to Sign', gesture: '🎤' },
   ];
+
+  const handleMobileToggle = () => {
+    setIsMobileOpen(!isMobileOpen);
+    if (!isMobileOpen) {
+      gsap.fromTo('.mobile-nav-item',
+        { x: -20, opacity: 0 },
+        { x: 0, opacity: 1, stagger: 0.1, duration: 0.4, ease: 'power2.out' }
+      );
+    }
+  };
 
   return (
     <>
-      {/* Mobile Menu Button */}
+      {/* Mobile Toggle */}
       <button
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
+        onClick={handleMobileToggle}
+        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 hover:scale-105 transition-transform"
       >
-        {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
+        {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
       </button>
 
-      {/* Sidebar */}
-      <aside
-        ref={sidebarRef}
-        className={`
-          fixed top-0 left-0 h-screen w-[280px] lg:w-[20%] 
-          bg-gradient-to-b from-white via-[#BFCFBB]/10 to-[#C8E6E2]/15 dark:from-gray-900 dark:to-gray-800
-          border-r border-gray-200 dark:border-gray-700
-          px-6 py-8 overflow-y-auto z-40
-          transition-transform duration-300 ease-in-out
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          shadow-2xl lg:shadow-none
-        `}
-        style={{
-          boxShadow: '4px 0 24px rgba(52, 76, 61, 0.08)'
-        }}
-      >
-        {/* Logo & Greeting */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform duration-300"
-              style={{ background: 'linear-gradient(135deg, #344C3D, #105F68)' }}
-            >
-              <Hand className="w-6 h-6 text-white" />
+      {/* Sidebar Desktop */}
+      <aside className={`
+        fixed left-0 top-0 h-full w-72 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 
+        transition-all duration-500 ease-in-out z-40
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="flex flex-col h-full p-6">
+          {/* Logo Area */}
+          <div className="mb-10 flex items-center gap-3 px-2">
+            <div className="w-12 h-12 bg-gradient-to-br from-[#105F68] to-[#3A9295] rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 hover:rotate-0 transition-transform duration-300">
+              <Hand className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-clip-text text-transparent"
-                style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295)' }}
-              >
-                SignVista
-              </h1>
-              <p className="text-xs text-gray-600 dark:text-gray-400">ISL Platform</p>
+              <h1 className="text-2xl font-black text-[#105F68] dark:text-[#63C1BB] tracking-tight">SignBridge</h1>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">Real-Time Translation</span>
             </div>
           </div>
 
-          <div
-            ref={greetingRef}
-            className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2"
-          >
-            Hey, Explorer!
-          </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Translate with sign language
-          </p>
-        </div>
+          {/* Nav Section */}
+          <nav className="flex-1 space-y-2">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  onClick={() => setIsMobileOpen(false)}
+                  className={`
+                    group flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 relative overflow-hidden
+                    ${isActive
+                      ? 'bg-gradient-to-r from-[#105F68] to-[#3A9295] text-white shadow-lg'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-[#105F68] dark:hover:text-[#63C1BB]'}
+                  `}
+                >
+                  <item.icon className={`w-5 h-5 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <span className="font-semibold text-sm">{item.label}</span>
+                  {isActive && (
+                    <div className="absolute right-0 top-0 h-full w-1 bg-white opacity-20" />
+                  )}
+                  {!isActive && (
+                    <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-lg">
+                      {item.gesture}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-        {/* Navigation */}
-        <nav className="space-y-2 mb-12">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.path;
+          {/* Footer Section */}
+          <div className="mt-auto space-y-4">
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              <span className="font-semibold text-sm">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            </button>
 
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                onClick={() => setIsMobileOpen(false)}
-                className={`
-                  nav-link group relative flex items-center gap-3 px-4 py-3 rounded-xl
-                  transition-all duration-300 overflow-hidden
-                  ${isActive
-                    ? 'text-white shadow-lg scale-105'
-                    : 'hover:bg-[#C8E6E2]/30 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
-                  }
-                `}
-                style={isActive ? { background: 'linear-gradient(135deg, #344C3D, #105F68)' } : undefined}
-              >
-                {/* Pulsing glow for active state */}
-                {isActive && (
-                  <div className="absolute inset-0 opacity-20 animate-pulse"
-                    style={{ background: 'linear-gradient(135deg, #9ED5D1, #BFCFBB)' }}
-                  />
-                )}
-
-                {/* Icon morphs to gesture on hover */}
-                <span className="relative z-10 group-hover:scale-110 transition-transform duration-300">
-                  <span className="group-hover:hidden inline-block">
-                    <Icon size={20} />
-                  </span>
-                  <span className="hidden group-hover:inline-block text-xl">
-                    {item.gesture}
-                  </span>
-                </span>
-
-                <span className="relative z-10 font-medium">{item.label}</span>
-
-                {/* Highlight bar */}
-                {isActive && (
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-l-full" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Theme Toggle */}
-        <div className="mt-auto pt-8 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-700 transition-all duration-300 group"
-          >
-            <span className="text-sm font-medium">Theme</span>
-            <div className="relative w-12 h-6 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors duration-300">
-              <div className={`
-                absolute top-1 w-4 h-4 rounded-full bg-white shadow-md
-                transition-transform duration-300 flex items-center justify-center
-                ${theme === 'dark' ? 'translate-x-7' : 'translate-x-1'}
-              `}>
-                {theme === 'dark' ? <Moon size={10} /> : <Sun size={10} />}
+            {/* Profile Brief */}
+            <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-3xl border border-gray-200/50 dark:border-gray-700/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#105F68] flex items-center justify-center text-white font-bold shadow-inner">
+                  UK
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">Ujjwal Kumar</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">Level 5 Signer</p>
+                </div>
+                <Settings className="w-4 h-4 text-gray-400 hover:text-[#105F68] transition-colors cursor-pointer" />
               </div>
             </div>
-          </button>
-        </div>
-
-        {/* Floating decoration */}
-        <div className="absolute bottom-20 right-6 text-6xl opacity-10 pointer-events-none animate-pulse">
-          👋
+          </div>
         </div>
       </aside>
 
-      {/* Mobile overlay */}
+      {/* Overlay for mobile */}
       {isMobileOpen && (
         <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/50 z-30"
         />
       )}
     </>

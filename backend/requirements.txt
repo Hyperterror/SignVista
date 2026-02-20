@@ -1,0 +1,21 @@
+# FastAPI & Server
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+pydantic==2.6.1
+
+# ML Pipeline (interfaces ready for Ishit's models)
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+mediapipe==0.10.9
+
+# PyTorch CPU-only (for LSTM model loading)
+torch==2.2.0
+torchvision==0.17.0
+
+# Utilities
+python-dotenv==1.0.1
+
+# Testing
+pytest==8.0.1
+httpx==0.27.0
