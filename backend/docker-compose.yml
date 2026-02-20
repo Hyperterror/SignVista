@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+      - MODEL_PATH=ml/models/weights/model.pth
+      - CONFIDENCE_THRESHOLD=0.6
+      - BUFFER_SIZE=45
+    volumes:
+      - .:/app
+    restart: unless-stopped
