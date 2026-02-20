@@ -1,3 +1,11 @@
+@import './fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'tw-animate-css';
+
 :root {
   --font-size: 16px;
   --background: #ffffff;
@@ -76,21 +84,14 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-
-
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--border);
   }
 
   body {
     @apply bg-background text-foreground;
   }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
 
   html {
     font-size: var(--font-size);
@@ -139,28 +140,20 @@
   }
 }
 
-/* SignVista Custom Animations and Styles */
 @layer utilities {
-
-  /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
   }
 
-  /* Custom 2.8D depth effect */
   .depth-2d8 {
     transform-style: preserve-3d;
     perspective: 1000px;
   }
 
-  /* Gradient text animation */
   @keyframes gradient-shift {
-
-    0%,
-    100% {
+    0%, 100% {
       background-position: 0% 50%;
     }
-
     50% {
       background-position: 100% 50%;
     }
@@ -171,14 +164,10 @@
     animation: gradient-shift 3s ease infinite;
   }
 
-  /* Floating animation */
   @keyframes float {
-
-    0%,
-    100% {
+    0%, 100% {
       transform: translateY(0px);
     }
-
     50% {
       transform: translateY(-20px);
     }
@@ -188,14 +177,10 @@
     animation: float 3s ease-in-out infinite;
   }
 
-  /* Pulse glow effect */
   @keyframes pulse-glow {
-
-    0%,
-    100% {
+    0%, 100% {
       box-shadow: 0 0 20px rgba(58, 146, 149, 0.3);
     }
-
     50% {
       box-shadow: 0 0 40px rgba(58, 146, 149, 0.6);
     }
@@ -205,12 +190,10 @@
     animation: pulse-glow 2s ease-in-out infinite;
   }
 
-  /* Shimmer effect for loading states */
   @keyframes shimmer {
     0% {
       background-position: -1000px 0;
     }
-
     100% {
       background-position: 1000px 0;
     }
@@ -225,15 +208,10 @@
     animation: shimmer 2s infinite;
   }
 
-  /* Smooth transitions for all interactive elements */
-  button,
-  a,
-  input,
-  textarea {
+  button, a, input, textarea {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Custom scrollbar styling */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -253,7 +231,6 @@
     background: linear-gradient(135deg, #105F68, #344C3D);
   }
 
-  /* Dark mode scrollbar */
   .dark ::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.05);
   }
