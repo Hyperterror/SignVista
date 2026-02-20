@@ -220,7 +220,7 @@ export default function ARRecognizePage() {
                 <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-[#105F68] to-[#3A9295] bg-clip-text text-transparent">
-                            SignBridge: AR Translate
+                            SignVista: AR Translate
                         </h1>
                         <p className="text-gray-600 dark:text-gray-400 mt-2">
                             Instant ISL recognition with augmented reality overlays and voice feedback

@@ -257,7 +257,7 @@ export default function ProfilePage() {
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/5backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-gray-900 rounded-[40px] w-full max-w-lg p-10 shadow-2xl border border-gray-100 dark:border-gray-800 relative translate-y-0 scale-100 transition-all duration-300">
                         <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 mb-2">Edit Persona</h2>
-                        <p className="text-gray-500 dark:text-gray-400 mb-8 font-medium">Update your digital identity on SignBridge.</p>
+                        <p className="text-gray-500 dark:text-gray-400 mb-8 font-medium">Update your digital identity on SignVista.</p>
 
                         <form onSubmit={handleUpdateProfile} className="space-y-6">
                             <div>
