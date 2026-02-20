@@ -18,13 +18,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <div className="flex min-h-screen bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 transition-colors duration-300">
             <Toaster />
             <HeaderActions />
             <Sidebar />
-            <main className="flex-1 ml-0 lg:ml-[20%] overflow-x-hidden">
+            <main className="flex-1 ml-0 lg:ml-[88px] overflow-x-hidden min-h-screen">
               {children}
             </main>
           </div>

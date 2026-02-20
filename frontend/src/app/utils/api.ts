@@ -29,9 +29,14 @@ class ApiService {
     }
 
     async get(endpoint: string) {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`);
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        return response.json();
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`);
+            if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+            return await response.json();
+        } catch (error) {
+            console.warn(`[Mock API] Failed to fetch ${endpoint}, returning empty fallback.`);
+            return []; // Safe fallback for mapping
+        }
     }
 
     async post(endpoint: string, data: any) {
