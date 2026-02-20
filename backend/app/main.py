@@ -26,7 +26,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("signvista")
+logger = logging.getLogger("signbridge")
 
 
 # ─── Lifespan (startup/shutdown) ──────────────────────────────────
@@ -35,7 +35,7 @@ logger = logging.getLogger("signvista")
 async def lifespan(app: FastAPI):
     """Load ML model on startup, cleanup on shutdown."""
     logger.info("=" * 60)
-    logger.info("🚀 SignVista Backend starting...")
+    logger.info("🚀 SignBridge Backend starting...")
     logger.info(f"   Environment: {settings.ENV}")
     logger.info(f"   CORS origins: {settings.CORS_ORIGINS}")
     logger.info(f"   Model path: {settings.MODEL_PATH}")
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
 # ─── FastAPI App ──────────────────────────────────────────────────
 
 app = FastAPI(
-    title="SignVista API",
+    title="SignBridge API",
     description=(
         "Indian Sign Language Recognition System — "
         "Real-time translation, interactive learning with proficiency tracking, "
@@ -105,16 +105,11 @@ async def health_check():
 # ─── Mount Route Routers ─────────────────────────────────────────
 
 from app.routes import translate, learn, game, stats, vocabulary
-<<<<<<< HEAD
-from app.routes import profile, text_to_sign, ar
-from app.routes import dictionary, progress, history, achievements, dashboard, chat
-=======
 from app.routes import profile, text_to_sign, ar, community, auth
-from app.routes import dictionary, progress, history, achievements, dashboard
->>>>>>> c9bfc70bc78ec643d20798c937b62cd51f1424a7
+from app.routes import dictionary, progress, history, achievements, dashboard, chat
 
 # Auth
-app.include_router(auth.router)
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 
 # Phase 1
 app.include_router(translate.router)
@@ -134,11 +129,8 @@ app.include_router(progress.router)
 app.include_router(history.router)
 app.include_router(achievements.router)
 app.include_router(dashboard.router)
-<<<<<<< HEAD
+app.include_router(community.router, prefix="/api/community", tags=["Community"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
-=======
-app.include_router(community.router)
->>>>>>> c9bfc70bc78ec643d20798c937b62cd51f1424a7
 
 
 # ─── Root Redirect ────────────────────────────────────────────────
@@ -147,7 +139,7 @@ app.include_router(community.router)
 async def root():
     """Root endpoint — redirects to docs."""
     return {
-        "message": "🖐️ SignVista API — Indian Sign Language Recognition",
+        "message": "🖐️ SignBridge API — Indian Sign Language Recognition",
         "docs": "/docs",
         "health": "/health",
         "version": "1.0.0",
