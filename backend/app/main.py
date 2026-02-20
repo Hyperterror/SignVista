@@ -106,7 +106,7 @@ async def health_check():
 
 from app.routes import translate, learn, game, stats, vocabulary
 from app.routes import profile, text_to_sign, ar
-from app.routes import dictionary, progress, history, achievements, dashboard
+from app.routes import dictionary, progress, history, achievements, dashboard, chat
 
 # Phase 1
 app.include_router(translate.router)
@@ -126,6 +126,7 @@ app.include_router(progress.router)
 app.include_router(history.router)
 app.include_router(achievements.router)
 app.include_router(dashboard.router)
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 
 # ─── Root Redirect ────────────────────────────────────────────────

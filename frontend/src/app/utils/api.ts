@@ -99,6 +99,27 @@ class ApiService {
             preferred_language: 'en'
         });
     }
+
+    // Chat Endpoints
+    async getContacts() {
+        return this.get('/chat/contacts');
+    }
+
+    async getChatMessages(contactId: string) {
+        return this.get(`/chat/messages/${contactId}`);
+    }
+
+    async sendChatMessage(receiverId: string, content: string, type: string = 'text') {
+        const id = 'msg_' + Math.random().toString(36).substring(2, 11);
+        return this.post('/chat/send', {
+            id,
+            sender_id: 'me',
+            receiver_id: receiverId,
+            content,
+            timestamp: Date.now() / 1000,
+            type
+        });
+    }
 }
 
 export const api = new ApiService();
