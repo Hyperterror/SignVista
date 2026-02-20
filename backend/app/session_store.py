@@ -16,6 +16,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ml.vocabulary import WORD_LIST, WORD_DISPLAY, is_valid_word
 from app.config import settings
+from passlib.context import CryptContext
+
+# ─── Auth Setup ──────────────────────────────────────────────────
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+# Persistent global users (in-memory mock database)
+USERS: Dict[str, Dict[str, Any]] = {}
 
 
 # ─── Constants ───────────────────────────────────────────────────
@@ -447,3 +460,103 @@ def clear_session(session_id: str):
 def clear_all_sessions():
     """Clear all sessions (for testing)."""
     _sessions.clear()
+
+
+# ─── Community Data (Global) ──────────────────────────────────────
+
+# In a real app, this would be a database. 
+# For the hackathon, we use global lists.
+COMMUNITY_POSTS = [
+    {
+        "id": "official_1",
+        "user_name": "SignVista Team",
+        "avatar_initials": "SV",
+        "content": "New update: Added 50+ medical signs to the dictionary. Stay informed, stay safe! 🏥",
+        "likes": 156,
+        "comments": [],
+        "timestamp": time.time() - 86400,
+        "is_official": True,
+        "achievement_text": None,
+        "tags": ["#Update", "#MedicalISL"]
+    },
+    {
+        "id": "post_1",
+        "user_name": "Ishaan Sharma",
+        "avatar_initials": "IS",
+        "content": "Just mastered the 'Welcome' sign in ISL! The AI feedback was super helpful in correcting my hand orientation. 🤟",
+        "likes": 24,
+        "comments": [],
+        "timestamp": time.time() - 7200,
+        "is_official": False,
+        "achievement_text": "Mastered: Welcome",
+        "tags": ["#Achievement", "#Learning"]
+    }
+]
+
+def get_community_feed() -> List[Dict]:
+    # Return posts sorted by timestamp desc
+    return sorted(COMMUNITY_POSTS, key=lambda x: x["timestamp"], reverse=True)
+
+def add_community_post(post_data: Dict):
+    COMMUNITY_POSTS.append(post_data)
+
+def toggle_like(post_id: str, session_id: str):
+    for post in COMMUNITY_POSTS:
+        if post["id"] == post_id:
+            # Simple simulation: just increment likes
+            post["likes"] += 1
+            return post
+    return None
+
+def get_active_users() -> List[Dict]:
+    active = []
+    # Mix of real sessions + some mock users for visual appeal
+    for sid, sess in _sessions.items():
+        name = "User"
+        active.append({"name": f"Signer_{sid[:4]}", "initials": sid[:2].upper(), "is_online": True})
+    
+    # Add mock users if list is small
+    if len(active) < 3:
+        active.append({"name": "Priya Patel", "initials": "PP", "is_online": True})
+        active.append({"name": "Rahul K.", "initials": "RK", "is_online": True})
+    
+    return active
+
+def register_user(data: Dict[str, Any]) -> Tuple[bool, str, Optional[UserSession]]:
+    """Register a new user and create a session."""
+    phone = data["phone"]
+    if phone in USERS:
+        return False, "Phone number already registered", None
+        
+    hashed_pwd = hash_password(data["password"])
+    user_id = str(uuid.uuid4())[:8]
+    
+    user_entry = {
+        "user_id": user_id,
+        "name": data["name"],
+        "email": data["email"],
+        "phone": phone,
+        "password": hashed_pwd,
+        "preferred_language": data.get("preferred_language", "en"),
+        "created_at": time.time()
+    }
+    
+    USERS[phone] = user_entry
+    
+    # Create a session tied to this user
+    session = get_session(user_id)
+    # We can store extra info in the session object if needed
+    
+    return True, "Success", session
+
+def login_user(phone: str, password: str) -> Tuple[bool, str, Optional[UserSession]]:
+    """Authenticate user and return session."""
+    user = USERS.get(phone)
+    if not user:
+        return False, "User not found", None
+        
+    if not verify_password(password, user["password"]):
+        return False, "Invalid password", None
+        
+    session = get_session(user["user_id"])
+    return True, "Login successful", session

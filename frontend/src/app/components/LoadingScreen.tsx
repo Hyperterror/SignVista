@@ -1,64 +1,37 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import gsap from 'gsap';
+import React from 'react';
+import { Sparkles } from 'lucide-react';
 
-export function LoadingScreen() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const handRef = useRef<HTMLDivElement>(null);
-  const logoRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const tl = gsap.timeline();
-
-    // Animate hand morphing into logo
-    tl.fromTo(
-      handRef.current,
-      { scale: 0, rotation: -180, opacity: 0 },
-      { scale: 1.2, rotation: 0, opacity: 1, duration: 0.8, ease: 'back.out(1.7)' }
-    )
-      .to(handRef.current, {
-        scale: 0.9,
-        y: -20,
-        duration: 0.4,
-        ease: 'power2.inOut'
-      })
-      .to(handRef.current, {
-        opacity: 0,
-        scale: 0.5,
-        duration: 0.3
-      })
-      .fromTo(
-        logoRef.current,
-        { opacity: 0, scale: 0.5, y: 20 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'back.out(1.7)' },
-        '-=0.2'
-      )
-      .to(containerRef.current, {
-        opacity: 0,
-        duration: 0.5,
-        delay: 0.3
-      });
-  }, []);
-
+export const LoadingScreen = () => {
   return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: 'linear-gradient(135deg, #105F68, #3A9295, #344C3D)' }}
-    >
-      <div className="relative">
-        {/* Hand icon morphing */}
-        <div ref={handRef} className="absolute inset-0 flex items-center justify-center">
-          <div className="text-9xl">👋</div>
-        </div>
+    <div className="min-h-screen bg-[#0A0C10] flex flex-col items-center justify-center p-6 z-[9999] fixed inset-0">
+      {/* Morphing background blobs */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#105F68]/10 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#08454D]/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
 
-        {/* Logo appearing */}
-        <div ref={logoRef} className="opacity-0 text-center">
-          <h1 className="text-6xl font-bold text-white mb-2">SignVista</h1>
-          <p className="text-white/80 text-lg">Indian Sign Language Platform</p>
+      <div className="loading-logo relative mb-8">
+        <div className="w-24 h-24 bg-[#105F68]/20 rounded-full flex items-center justify-center border border-[#105F68]/30">
+          <Sparkles className="w-12 h-12 text-[#105F68]" />
         </div>
+        <div className="absolute inset-[-8px] border-2 border-[#105F68]/10 rounded-full animate-ping" />
       </div>
+      <h1 className="text-3xl font-black text-white tracking-[0.3em] mb-4">SIGNVISTA</h1>
+      <div className="w-64 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/10">
+        <div className="loading-progress h-full bg-gradient-to-r from-[#105F68] to-[#2DA4A8] w-0 animate-progress-glow" />
+      </div>
+      <p className="mt-4 text-[#105F68] font-bold text-xs tracking-widest uppercase animate-pulse">Initializing Core...</p>
+
+      <style jsx>{`
+                .animate-progress-glow {
+                    animation: grow 2s ease-in-out infinite;
+                }
+                @keyframes grow {
+                    0% { width: 0%; opacity: 0.5; }
+                    50% { width: 70%; opacity: 1; }
+                    100% { width: 100%; opacity: 0.5; }
+                }
+            `}</style>
     </div>
   );
-}
+};

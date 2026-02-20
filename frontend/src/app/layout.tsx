@@ -1,9 +1,5 @@
 import type { Metadata } from 'next';
-import { ThemeProvider } from './context/ThemeContext';
-import { Sidebar } from './components/Sidebar';
-import { LoadingScreen } from './components/LoadingScreen';
-import { HeaderActions } from './components/HeaderActions';
-import { Toaster } from './components/Toaster';
+import { ClientLayout } from './components/ClientLayout';
 import '../styles/globals.css';
 
 export const metadata: Metadata = {
@@ -19,16 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          <div className="flex min-h-screen bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 transition-colors duration-300">
-            <Toaster />
-            <HeaderActions />
-            <Sidebar />
-            <main className="flex-1 ml-0 lg:ml-[20%] overflow-x-hidden">
-              {children}
-            </main>
-          </div>
-        </ThemeProvider>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
