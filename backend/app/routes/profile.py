@@ -125,7 +125,21 @@ async def get_profile(session_id: str, current_user: dict = Depends(get_current_
 
     profile = _profiles.get(session_id)
     if profile is None:
-        raise HTTPException(status_code=404, detail="Profile not found. Create one with POST /api/profile first.")
+        # Fallback: Check if this session belongs to the current authenticated user
+        if current_user["user_id"] == session_id:
+            logger.info(f"Dynamically generating profile for session {session_id}")
+            profile = {
+                "sessionId": current_user["user_id"],
+                "name": current_user["name"],
+                "email": current_user["email"],
+                "phone": current_user["phone"],
+                "preferred_language": current_user.get("preferred_language", "en"),
+                "created_at": current_user.get("created_at", time.time()),
+            }
+            # Cache it to prevent redundant lookups
+            _profiles[session_id] = profile
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found. Create one with POST /api/profile first.")
 
     lang = profile["preferred_language"]
     welcome_msg = WELCOME_MESSAGES.get(lang, WELCOME_MESSAGES["en"]).format(

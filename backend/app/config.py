@@ -23,7 +23,7 @@ class Settings:
 
     # CORS — add Ayush's frontend URL here
     CORS_ORIGINS: List[str] = os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000,http://localhost:3001"
+        "CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
     ).split(",")
 
     # ML Model paths — Ishit will place weights here
