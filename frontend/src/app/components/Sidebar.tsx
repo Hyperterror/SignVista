@@ -44,8 +44,7 @@ export function Sidebar() {
     { path: '/dictionary', icon: Search, label: 'ISL Dictionary', gesture: '🔎' },
     { path: '/community', icon: Users, label: 'Community', gesture: '🤝' },
     { path: '/translate', icon: Camera, label: 'AR Translate', gesture: '📸' },
-    { path: '/text', icon: Type, label: 'Text to Sign', gesture: '✍️' },
-    { path: '/voice', icon: Mic, label: 'Voice to Sign', gesture: '🎤' },
+    { path: '/chat', icon: MessageSquare, label: 'Messages', gesture: '💬' },
   ];
 
   const handleMobileToggle = () => {
