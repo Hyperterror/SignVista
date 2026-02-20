@@ -99,6 +99,10 @@ class ApiService {
         return this.get(`/achievements/${this.sessionId}`);
     }
 
+    async getMe() {
+        return this.get(`/profile/${this.sessionId}`);
+    }
+
     async getProfile() {
         return this.get(`/profile/${this.sessionId}`);
     }
@@ -113,7 +117,6 @@ class ApiService {
         });
     }
 
-<<<<<<< HEAD
     // Chat Endpoints
     async getContacts() {
         return this.get('/chat/contacts');
@@ -134,7 +137,7 @@ class ApiService {
             type
         });
     }
-=======
+
     // Community Endpoints
     async getCommunityFeed() {
         return this.get('/community/feed');
@@ -184,10 +187,6 @@ class ApiService {
         }
     }
 
-    async getMe() {
-        return this.get(`/profile/${this.sessionId}`);
-    }
-
     private setSession(sessionId: string, token: string | null) {
         this.sessionId = sessionId;
         this.token = token;
@@ -200,7 +199,6 @@ class ApiService {
             }
         }
     }
->>>>>>> c9bfc70bc78ec643d20798c937b62cd51f1424a7
 }
 
 export const api = new ApiService();
