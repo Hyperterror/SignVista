@@ -7,16 +7,19 @@ const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
     private sessionId: string;
+    private token: string | null = null;
 
     constructor() {
-        // Default session ID
+        // Default values
         this.sessionId = 'temp_guest';
 
         // Only access localStorage in the browser
         if (typeof window !== 'undefined') {
-            const stored = localStorage.getItem('signvista_session_id');
-            if (stored) {
-                this.sessionId = stored;
+            this.token = localStorage.getItem('signvista_access_token');
+            const storedSession = localStorage.getItem('signvista_session_id');
+
+            if (storedSession) {
+                this.sessionId = storedSession;
             } else {
                 this.sessionId = 'user_' + Math.random().toString(36).substring(2, 11);
                 localStorage.setItem('signvista_session_id', this.sessionId);
@@ -29,15 +32,25 @@ class ApiService {
     }
 
     async get(endpoint: string) {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`);
+        const headers: any = {};
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers });
         if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
         return response.json();
     }
 
     async post(endpoint: string, data: any) {
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(data)
         });
         if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
@@ -98,6 +111,72 @@ class ApiService {
             phone,
             preferred_language: 'en'
         });
+    }
+
+    // Community Endpoints
+    async getCommunityFeed() {
+        return this.get('/community/feed');
+    }
+
+    async createPost(content: string, tags: string[] = []) {
+        return this.post('/community/post', {
+            sessionId: this.sessionId,
+            content,
+            tags
+        });
+    }
+
+    async likePost(postId: string) {
+        return this.post('/community/like', {
+            sessionId: this.sessionId,
+            postId
+        });
+    }
+
+    async getActiveUsers() {
+        return this.get('/community/active-users');
+    }
+
+    // Auth Endpoints
+    async login(phone: string, password: string) {
+        const result = await this.post('/auth/login', { phone, password });
+        if (result.status === 'ok') {
+            this.setSession(result.sessionId, result.access_token);
+        }
+        return result;
+    }
+
+    async register(data: any) {
+        const result = await this.post('/auth/register', data);
+        if (result.status === 'ok') {
+            this.setSession(result.sessionId, result.access_token);
+        }
+        return result;
+    }
+
+    async logout() {
+        try {
+            await this.post('/auth/logout', {});
+        } finally {
+            this.setSession('guest_' + Math.random().toString(36).substring(2, 11), null);
+        }
+    }
+
+    async getMe() {
+        return this.get(`/profile/${this.sessionId}`);
+    }
+
+    private setSession(sessionId: string, token: string | null) {
+        this.sessionId = sessionId;
+        this.token = token;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('signvista_session_id', sessionId);
+            if (token) {
+                localStorage.setItem('signvista_access_token', token);
+            } else {
+                localStorage.removeItem('signvista_access_token');
+            }
+        }
     }
 }
 

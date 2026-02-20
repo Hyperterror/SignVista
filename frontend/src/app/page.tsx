@@ -20,32 +20,45 @@ import { CompactStats } from './components/CompactStats';
 import { api } from './utils/api';
 import { useTheme } from './context/ThemeContext';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import { LoadingScreen } from './components/LoadingScreen';
 
 export default function HomePage() {
   const { theme, toggleTheme } = useTheme();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    const fetchDashboard = async () => {
+    // Artificial delay to show high-aesthetic loader as requested
+    const sequence = async () => {
+      // Step 1: Small delay for visual impact
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Step 2: Check Auth
+      const token = typeof window !== 'undefined' ? localStorage.getItem('signvista_access_token') : null;
+
+      if (!token) {
+        router.push('/auth');
+        return;
+      }
+
+      // Step 3: Fetch Data
       try {
         const data = await api.getDashboard();
         setDashboardData(data);
-      } catch (error) {
-        console.error('Failed to load dashboard:', error);
-      } finally {
         setIsLoading(false);
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        router.push('/auth');
       }
     };
-    fetchDashboard();
-  }, []);
+
+    sequence();
+  }, [router]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0a0a0a]">
-        <div className="w-12 h-12 border-4 border-[#105F68] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -78,7 +91,7 @@ export default function HomePage() {
           <div className="lg:col-span-3 space-y-6">
             <div className="flex items-center justify-between px-2">
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                Welcome to SignBridge <Sparkles className="w-5 h-5 text-[#3A9295]" />
+                Welcome to SignVista <Sparkles className="w-5 h-5 text-[#3A9295]" />
               </h2>
             </div>
 

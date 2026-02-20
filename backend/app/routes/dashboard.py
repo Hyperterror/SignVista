@@ -7,7 +7,8 @@ Ayush: The ultimate personalized dashboard endpoint.
        Call this when the user lands on the dashboard.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.dependencies import get_current_user
 from typing import List
 
 from app.schemas import DashboardResponse, XPLevelInfo, ActivityEvent
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["Dashboard"])
 
 
 @router.get("/dashboard/{session_id}", response_model=DashboardResponse)
-async def get_dashboard(session_id: str):
+async def get_dashboard(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get aggregated dashboard summary.
     """

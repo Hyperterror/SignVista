@@ -151,7 +151,7 @@ export default function VoiceToSignPage() {
                     <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent"
                         style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295)' }}
                     >
-                        SignBridge Voice
+                        SignVista Voice
                     </h1>
                     <p className="text-xl text-gray-600 dark:text-gray-400">
                         Speak naturally and watch your words transform into ISL gestures
