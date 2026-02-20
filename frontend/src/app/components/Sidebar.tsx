@@ -1,4 +1,7 @@
-import { NavLink, useLocation } from 'react-router';
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import gsap from 'gsap';
@@ -16,7 +19,7 @@ import {
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const greetingRef = useRef<HTMLDivElement>(null);
-  const location = useLocation();
+  const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -125,12 +128,12 @@ export function Sidebar() {
         <nav className="space-y-2 mb-12">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = pathname === item.path;
 
             return (
-              <NavLink
+              <Link
                 key={item.path}
-                to={item.path}
+                href={item.path}
                 onClick={() => setIsMobileOpen(false)}
                 className={`
                   nav-link group relative flex items-center gap-3 px-4 py-3 rounded-xl
@@ -165,7 +168,7 @@ export function Sidebar() {
                 {isActive && (
                   <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-l-full" />
                 )}
-              </NavLink>
+              </Link>
             );
           })}
         </nav>
