@@ -23,16 +23,16 @@ export function CompactStats({ data }: { data: DashboardData }) {
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                        <span className="font-bold text-sm">Level {data.xp_info.level}</span>
+                        <span className="font-bold text-sm">Level {data?.xp_info?.level ?? 0}</span>
                     </div>
                     <span className="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-bold">XP PROGRESS</span>
                 </div>
                 <div>
                     <div className="flex justify-between text-[10px] mb-1 font-bold opacity-60">
-                        <span>{data.xp_info.current_xp} XP</span>
-                        <span>{data.xp_info.next_level_xp} XP</span>
+                        <span>{data?.xp_info?.current_xp ?? 0} XP</span>
+                        <span>{data?.xp_info?.next_level_xp ?? 0} XP</span>
                     </div>
-                    <Progress value={data.xp_info.progress_percent} className="h-2 bg-gray-100 dark:bg-gray-700" />
+                    <Progress value={data?.xp_info?.progress_percent ?? 0} className="h-2 bg-gray-100 dark:bg-gray-700" />
                 </div>
             </div>
 
@@ -42,7 +42,7 @@ export function CompactStats({ data }: { data: DashboardData }) {
                     <Flame className="w-6 h-6 text-orange-600" />
                 </div>
                 <div>
-                    <div className="text-2xl font-black text-gray-900 dark:text-gray-100 leading-none">{data.current_streak}</div>
+                    <div className="text-2xl font-black text-gray-900 dark:text-gray-100 leading-none">{data?.current_streak ?? 0}</div>
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Day Streak</div>
                 </div>
             </div>
@@ -53,7 +53,7 @@ export function CompactStats({ data }: { data: DashboardData }) {
                     <Target className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                    <div className="text-2xl font-black text-gray-900 dark:text-gray-100 leading-none">{Math.round(data.overall_proficiency * 100)}%</div>
+                    <div className="text-2xl font-black text-gray-900 dark:text-gray-100 leading-none">{Math.round((data?.overall_proficiency ?? 0) * 100)}%</div>
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Proficiency</div>
                 </div>
             </div>
