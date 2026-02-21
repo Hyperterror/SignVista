@@ -1,0 +1,16 @@
+{
+  "model_path": "../models/translation/squeezenet_model",
+  "class_mapping": "../config/translation_classes.json",
+  "yolo_config": "../config/yolo/cross-hands.cfg",
+  "yolo_weights": "../config/yolo/cross-hands.weights",
+  "face_cascade": "haarcascade_frontalface_default.xml",
+  "activation_threshold": 35,
+  "num_classes": 10,
+  "yolo_confidence": 0.5,
+  "yolo_threshold": 0.3,
+  "yolo_size": 416,
+  "image_target_size": [224, 224],
+  "video_duration_seconds": 7,
+  "fps": 24,
+  "frame_sample_rate": 0.2
+}
