@@ -13,7 +13,7 @@ export const LoadingScreen = () => {
         <div className="relative w-full h-full flex items-center justify-center animate-bob">
 
           {/* Authentic 3D Hand Image */}
-          <div className="relative z-20 w-full h-full flex flex-col items-center justify-center animate-wave-tilt">
+          <div className="relative z-20 w-full h-full flex flex-col items-center justify-center animate-wave">
             <img
               src="/assets/images/3d_hand_nobg.png"
               alt="3D Waving Hand"
@@ -40,9 +40,10 @@ export const LoadingScreen = () => {
           50% { transform: translateY(-35px); }
         }
 
-        @keyframes wave-tilt {
-          0%, 100% { transform: rotate(-5deg); }
-          50% { transform: rotate(10deg); }
+        @keyframes wave {
+          0%, 100% { transform: rotate(0deg); }
+          20%, 60% { transform: rotate(-15deg); }
+          40%, 80% { transform: rotate(15deg); }
         }
 
         @keyframes shadow-sync {
@@ -57,7 +58,7 @@ export const LoadingScreen = () => {
         }
 
         .animate-bob { animation: bob 4s ease-in-out infinite; }
-        .animate-wave-tilt { animation: wave-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
+        .animate-wave { animation: wave 2.5s ease-in-out infinite; transform-origin: center bottom; }
         .animate-shadow-sync { animation: shadow-sync 4s ease-in-out infinite; }
         .animate-dash { animation: dash 2.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
       `}</style>
