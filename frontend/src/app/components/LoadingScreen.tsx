@@ -15,7 +15,7 @@ export const LoadingScreen = () => {
           {/* Authentic 3D Hand Image */}
           <div className="relative z-20 w-full h-full flex flex-col items-center justify-center animate-wave-tilt">
             <img
-              src="/3d_hand_nobg.png"
+              src="/assets/images/3d_hand_nobg.png"
               alt="3D Waving Hand"
               className="w-full h-full object-contain filter drop-shadow-[0_40px_60px_rgba(0,0,0,0.15)] select-none scale-125 md:scale-150"
               draggable={false}
