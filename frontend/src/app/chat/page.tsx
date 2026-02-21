@@ -31,29 +31,43 @@ export default function ChatPage() {
     const sessionId = api.getSessionId(); // My user ID
 
     useEffect(() => {
+        let isMounted = true;
+        let connectTimeout: NodeJS.Timeout;
+
         const loadContacts = async () => {
             try {
                 const data = await api.get('/chat/contacts');
-                setContacts(data);
-                if (data.length > 0) setSelectedContact(data[0]);
+                if (isMounted) {
+                    setContacts(data);
+                    if (data.length > 0 && !selectedContact) setSelectedContact(data[0]);
+                }
             } catch (error) {
-                toast.error('Failed to load contacts');
+                if (isMounted) toast.error('Failed to load contacts');
             } finally {
-                setIsLoading(false);
+                if (isMounted) setIsLoading(false);
             }
         };
-        loadContacts();
 
-        if (sessionId && !ws.current) {
-            // Initialize WebSocket connection
+        const connectWs = () => {
+            if (!sessionId || ws.current) return;
+
             const wsOrigin = getWsOrigin();
             const wsUrl = `${wsOrigin}/api/chat/ws/${sessionId}`;
             console.log("Connecting to WS:", wsUrl);
+
             const socket = new WebSocket(wsUrl);
             ws.current = socket;
 
-            socket.onopen = () => console.log("Chat WebSocket Connected");
+            socket.onopen = () => {
+                if (!isMounted) {
+                    socket.close();
+                    return;
+                }
+                console.log("Chat WebSocket Connected");
+            };
+
             socket.onmessage = (event) => {
+                if (!isMounted) return;
                 try {
                     const incomingMsg = JSON.parse(event.data);
                     setMessages((prev) => [...prev, incomingMsg]);
@@ -61,18 +75,36 @@ export default function ChatPage() {
                     console.error("Failed to parse WS message", e);
                 }
             };
-            socket.onerror = (err) => {
-                console.error("WS Error Details:", err);
-                toast.error("WebSocket connection error");
-            };
-            socket.onclose = () => {
-                console.log("Chat WebSocket Disconnected");
-                ws.current = null;
-            };
-        }
 
-        // Cleanup socket on unmount
+            socket.onerror = (err: any) => {
+                // Ignore errors if we are unmounting or if it's a transient handshake close
+                if (!isMounted) return;
+
+                // WebSocket errors are notoriously opaque in browsers (often {} Event)
+                // We only toast if the connection actually fails to open after the delay
+                if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+                    console.error("WS Error Details:", err);
+                    toast.error("WebSocket connection error");
+                }
+            };
+
+            socket.onclose = (event) => {
+                if (isMounted) {
+                    console.log("Chat WebSocket Disconnected", event.code);
+                    ws.current = null;
+                }
+            };
+        };
+
+        loadContacts();
+
+        // Add a 300ms delay before connecting to let React 18 strict mode 
+        // finish its double-mount cycle and ensure the environment is stable.
+        connectTimeout = setTimeout(connectWs, 300);
+
         return () => {
+            isMounted = false;
+            clearTimeout(connectTimeout);
             if (ws.current) {
                 const socket = ws.current;
                 if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
