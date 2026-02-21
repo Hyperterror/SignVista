@@ -137,16 +137,23 @@ const StatCard = ({
     );
 };
 
-export function StatsDashboard() {
+interface StatsProps {
+    totalWords: number;
+    practiced: number;
+    proficiency: number;
+    streak: number;
+}
+
+export function StatsDashboard({ totalWords, practiced, proficiency, streak }: StatsProps) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full mb-12">
             <StatCard
                 icon={BookOpen}
                 iconColor="#4F46E5"
-                progressValue={42}
+                progressValue={100}
                 progressColor="#4F46E5"
-                mainStat="1,200"
-                subStat="— 48 New"
+                mainStat={totalWords.toString()}
+                subStat=""
                 subStatColor="#4F46E5"
                 label="Total signs in dictionary"
                 delayIdx={0}
@@ -157,12 +164,12 @@ export function StatsDashboard() {
             <StatCard
                 icon={Hand}
                 iconColor="#0EA5E9"
-                progressValue={22}
+                progressValue={practiced > 0 ? Math.round((practiced / totalWords) * 100) : 0}
                 progressColor="#0EA5E9"
-                mainStat="84"
-                subStat="— 17 This Week"
+                mainStat={practiced.toString()}
+                subStat=""
                 subStatColor="#0EA5E9"
-                label="Practice sessions completed"
+                label="Signs Practiced"
                 delayIdx={1}
                 floatDuration={3.2}
                 accentColor="#0EA5E9"
@@ -171,10 +178,10 @@ export function StatsDashboard() {
             <StatCard
                 icon={BarChart3}
                 iconColor="#9333EA"
-                progressValue={-5}
+                progressValue={proficiency}
                 progressColor="#9333EA"
-                mainStat="73%"
-                subStat="— Needs Practice"
+                mainStat={`${proficiency}%`}
+                subStat=""
                 subStatColor="#9333EA"
                 label="Overall ISL proficiency score"
                 delayIdx={2}
@@ -186,12 +193,12 @@ export function StatsDashboard() {
             <StatCard
                 icon={Gamepad2}
                 iconColor="#10B981"
-                progressValue={5}
+                progressValue={streak * 10}
                 progressColor="#10B981"
-                mainStat="13"
-                subStat="— 17 High Score"
+                mainStat={streak.toString()}
+                subStat=" days"
                 subStatColor="#10B981"
-                label="Speed challenge best streak"
+                label="Current Learning Streak"
                 delayIdx={3}
                 floatDuration={4.0}
                 isExtraBouncy={true}
@@ -200,3 +207,4 @@ export function StatsDashboard() {
         </div>
     );
 }
+

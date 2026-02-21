@@ -34,6 +34,11 @@ export default function GamePage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const requestRef = useRef<number>();
+    const gameStateRef = useRef(gameState);
+
+    useEffect(() => {
+        gameStateRef.current = gameState;
+    }, [gameState]);
 
     useEffect(() => {
         gsap.fromTo('.game-header', { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8 });
@@ -97,7 +102,8 @@ export default function GamePage() {
     };
 
     const processFrame = async () => {
-        if (!gameState.isActive || !isCameraActive || !videoRef.current) return;
+        const currentState = gameStateRef.current;
+        if (!currentState.isActive || !isCameraActive || !videoRef.current) return;
 
         const canvas = document.createElement('canvas');
         canvas.width = 300;
@@ -110,7 +116,7 @@ export default function GamePage() {
         try {
             const response = await api.post('/game/attempt', {
                 sessionId: api.getSessionId(),
-                gameId: gameState.gameId,
+                gameId: currentState.gameId,
                 frame: frame
             });
 
@@ -128,13 +134,13 @@ export default function GamePage() {
                     { scale: 1.1, backgroundColor: 'rgba(34, 197, 94, 0.2)' },
                     { scale: 1, backgroundColor: 'transparent', duration: 0.5 }
                 );
-                toast.success(`Correct! +${response.score - gameState.score} XP`, { position: 'top-center' });
+                toast.success(`Correct! +${response.score - currentState.score} XP`, { position: 'top-center' });
             }
         } catch (e) {
             console.error(e);
         }
 
-        if (gameState.isActive) {
+        if (gameStateRef.current.isActive) {
             requestRef.current = requestAnimationFrame(() => setTimeout(processFrame, 500));
         }
     };

@@ -1,52 +1,77 @@
-from fastapi import APIRouter, HTTPException
-from typing import List, Optional
-from pydantic import BaseModel
+import json
 import time
+from typing import List, Dict
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
+from ..database import get_db
 
 router = APIRouter()
 
-class Message(BaseModel):
-    id: str
-    sender_id: str
-    receiver_id: str
-    content: str
-    timestamp: float
-    type: str = "text"
+# Connection Manager for WebSockets
+class ConnectionManager:
+    def __init__(self):
+        # Maps user_id to their active WebSocket connection
+        self.active_connections: Dict[str, WebSocket] = {}
 
-class Contact(BaseModel):
-    id: str
-    name: str
-    avatar: Optional[str] = None
-    status: str = "offline"
-    last_message: Optional[str] = None
-    last_message_time: Optional[float] = None
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
 
-# Mock Data
-MOCK_CONTACTS = [
-    {"id": "user_1", "name": "Aarav Sharma", "status": "online", "last_message": "Hey, how are you?", "last_message_time": time.time() - 3600},
-    {"id": "user_2", "name": "Ishani Gupta", "status": "away", "last_message": "Did you see the new ISL sign for 'Future'?", "last_message_time": time.time() - 86400},
-    {"id": "user_3", "name": "Vivek Mehra", "status": "offline", "last_message": "Let's practice tomorrow.", "last_message_time": time.time() - 172800},
-    {"id": "user_4", "name": "Meera Iyer", "status": "online", "last_message": "Awesome work on the dashboard!", "last_message_time": time.time() - 500},
-]
+    def disconnect(self, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
 
-MOCK_MESSAGES = {
-    "user_1": [
-        {"id": "m1", "sender_id": "user_1", "receiver_id": "me", "content": "Hey, how are you?", "timestamp": time.time() - 3600, "type": "text"},
-        {"id": "m2", "sender_id": "me", "receiver_id": "user_1", "content": "I'm good, just practicing some signs.", "timestamp": time.time() - 3500, "type": "text"},
-    ]
-}
+    async def send_personal_message(self, message: dict, user_id: str):
+        if user_id in self.active_connections:
+            await self.active_connections[user_id].send_text(json.dumps(message))
 
-@router.get("/contacts", response_model=List[Contact])
+manager = ConnectionManager()
+
+@router.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Parse incoming JSON message
+            message_data = json.loads(data)
+            
+            # Broadcast the message to the intended receiver
+            receiver_id = message_data.get("receiver_id")
+            if receiver_id:
+                # Construct clean payload
+                payload = {
+                    "id": message_data.get("id", str(time.time())),
+                    "sender_id": user_id,
+                    "receiver_id": receiver_id,
+                    "content": message_data.get("content", ""),
+                    "timestamp": time.time(),
+                    "type": message_data.get("type", "text")
+                }
+                
+                # Send back to sender for their own UI update confirmation
+                await manager.send_personal_message(payload, user_id)
+                
+                # Send to receiver if online
+                await manager.send_personal_message(payload, receiver_id)
+                
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+
+# Return mock active users (everyone online right now)
+@router.get("/contacts")
 async def get_contacts():
-    return MOCK_CONTACTS
+    # Return everyone connected + some mocked offline users for UI testing
+    active_ids = list(manager.active_connections.keys())
+    
+    contacts = [
+        {"id": "user_1", "name": "Aarav Sharma", "status": "online" if "user_1" in active_ids else "offline", "last_message": "Hey!", "last_message_time": time.time() - 3600},
+        {"id": "user_2", "name": "Ishani Gupta", "status": "online" if "user_2" in active_ids else "away", "last_message": "Did you see the new ISL sign?", "last_message_time": time.time() - 86400},
+        {"id": "user_3", "name": "Vivek Mehra", "status": "offline", "last_message": "Let's practice tomorrow.", "last_message_time": time.time() - 172800},
+    ]
+    return contacts
 
-@router.get("/messages/{contact_id}", response_model=List[Message])
+@router.get("/messages/{contact_id}")
 async def get_messages(contact_id: str):
-    if contact_id not in MOCK_MESSAGES:
-        return []
-    return MOCK_MESSAGES[contact_id]
-
-@router.post("/send")
-async def send_message(msg: Message):
-    # In a real app, we'd save to DB here
-    return {"status": "sent", "message_id": msg.id}
+    # Historical DB logic would go here. For now returning empty list to let WS handle realtime 
+    return []

@@ -60,18 +60,27 @@ export default function DictionaryPage() {
 
         fetchWords();
 
-        // Entrance animation
-        gsap.fromTo(
-            '.search-bar',
-            { y: -50, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }
-        );
+        const animateHeader = () => {
+            if (document.querySelector('.search-bar')) {
+                gsap.fromTo(
+                    '.search-bar',
+                    { y: -50, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }
+                );
+            }
 
-        gsap.fromTo(
-            '.category-filter',
-            { y: -30, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.6, delay: 0.1, ease: 'power3.out' }
-        );
+            if (document.querySelector('.category-filter')) {
+                gsap.fromTo(
+                    '.category-filter',
+                    { y: -30, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.6, delay: 0.1, ease: 'power3.out' }
+                );
+            }
+        };
+
+        fetchWords().then(() => {
+            requestAnimationFrame(animateHeader);
+        });
     }, []);
 
     useEffect(() => {
@@ -91,20 +100,26 @@ export default function DictionaryPage() {
 
         setFilteredWords(filtered);
 
-        // Animate cards
-        gsap.fromTo(
-            '.word-card',
-            { scale: 0.9, opacity: 0, y: 20 },
-            {
-                scale: 1,
-                opacity: 1,
-                y: 0,
-                duration: 0.4,
-                stagger: 0.05,
-                ease: 'back.out(1.7)'
-            }
-        );
-    }, [searchQuery, selectedCategory, words]);
+        if (!isLoading && filteredWords.length > 0) {
+            const animateCards = () => {
+                if (document.querySelector('.word-card')) {
+                    gsap.fromTo(
+                        '.word-card',
+                        { scale: 0.9, opacity: 0, y: 20 },
+                        {
+                            scale: 1,
+                            opacity: 1,
+                            y: 0,
+                            duration: 0.4,
+                            stagger: 0.05,
+                            ease: 'back.out(1.7)'
+                        }
+                    );
+                }
+            };
+            requestAnimationFrame(animateCards);
+        }
+    }, [searchQuery, selectedCategory, words, isLoading]);
 
     const playSign = (word: string) => {
         toast.success(`Playing sign for "${word}"`);
