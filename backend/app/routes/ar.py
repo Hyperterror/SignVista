@@ -125,26 +125,6 @@ def _extract_landmarks_full(frame: np.ndarray) -> dict:
 async def get_ar_landmarks(request: ARLandmarksRequest):
     """
     Extract pose and hand landmarks from a camera frame for AR overlay.
-
-    Returns 33 pose landmarks + up to 21 landmarks per hand,
-    plus any current sign prediction if the buffer is ready.
-
-    Ayush uses these coordinates to draw:
-    - Pose skeleton lines connecting body joints
-    - Hand outlines with finger connections
-    - Gesture hint overlays (e.g., "Move hand higher")
-
-    Ayush sends:
-    ```json
-    {
-        "sessionId": "user-123",
-        "frame": "data:image/jpeg;base64,..."
-    }
-    ```
-
-    Response includes all landmark coordinates as (x, y, z) normalized
-    to the frame dimensions (0.0-1.0). Ayush multiplies by canvas
-    width/height to get pixel positions.
     """
     if not request.sessionId or not request.sessionId.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
@@ -160,29 +140,62 @@ async def get_ar_landmarks(request: ARLandmarksRequest):
 
     frame = resize_frame(frame, target_width=640)
 
-    # Extract landmarks
-    landmarks = _extract_landmarks_full(frame)
-
-    # Also run prediction pipeline (piggyback on the same frame)
-    predicted, confidence, buffer_status = predict_from_raw_frame(
+    # Run ML inference pipeline + get raw landmarks (one pass!)
+    predicted, confidence, status, results, module_details = predict_from_raw_frame(
         session_id=request.sessionId,
         frame=frame,
+        return_landmarks=True,
+        return_module_details=True
     )
+    
+    # Log prediction for debugging
+    if predicted:
+        logger.info(f"AR Prediction: {predicted} (confidence: {confidence:.3f})")
+    if module_details:
+        logger.info(f"Module details: {module_details}")
 
-    # Generate gesture hint based on landmark analysis
+    # Transform Mediapipe results to AR response format
+    pose_lms = []
+    lh_lms = []
+    rh_lms = []
+    
+    if results:
+        if results.pose_landmarks:
+            pose_lms = [
+                LandmarkPoint(x=round(lm.x, 4), y=round(lm.y, 4), z=round(lm.z, 4), visibility=round(lm.visibility, 3))
+                for lm in results.pose_landmarks.landmark
+            ]
+        if results.left_hand_landmarks:
+            lh_lms = [
+                LandmarkPoint(x=round(lm.x, 4), y=round(lm.y, 4), z=round(lm.z, 4), visibility=1.0)
+                for lm in results.left_hand_landmarks.landmark
+            ]
+        if results.right_hand_landmarks:
+            rh_lms = [
+                LandmarkPoint(x=round(lm.x, 4), y=round(lm.y, 4), z=round(lm.z, 4), visibility=1.0)
+                for lm in results.right_hand_landmarks.landmark
+            ]
+
+    # Face detection using existing utility
+    from ml.face_detector import detect_face
+    face_detected = detect_face(frame)
+
+    # Generate gesture hint
     gesture_hint = ""
-    if not landmarks["face_detected"]:
-        gesture_hint = "Please show your face to the camera"
-    elif not landmarks["right_hand_landmarks"] and not landmarks["left_hand_landmarks"]:
-        gesture_hint = "Raise your hands to start signing"
-    elif predicted and confidence > 0.5:
-        gesture_hint = f"Detected: {predicted} ({confidence:.0%})"
+    if not face_detected:
+        gesture_hint = "Please show your face"
+    elif not lh_lms and not rh_lms:
+        gesture_hint = "Raise your hands to start"
+    elif predicted and confidence > settings.CONFIDENCE_THRESHOLD:
+        gesture_hint = f"Detected: {predicted}"
+    elif "collecting" in status:
+        gesture_hint = f"Analyzing... {status.split('_')[-1]}"
 
     return ARLandmarksResponse(
-        pose_landmarks=landmarks["pose_landmarks"],
-        left_hand_landmarks=landmarks["left_hand_landmarks"],
-        right_hand_landmarks=landmarks["right_hand_landmarks"],
-        face_detected=landmarks["face_detected"],
+        pose_landmarks=pose_lms,
+        left_hand_landmarks=lh_lms,
+        right_hand_landmarks=rh_lms,
+        face_detected=face_detected,
         prediction=predicted,
         confidence=round(confidence, 3),
         gesture_hint=gesture_hint,

@@ -67,7 +67,7 @@ async def learn_attempt(request: LearnAttemptRequest):
     frame = resize_frame(frame, target_width=640)
 
     # Run ML inference
-    predicted, confidence, buffer_status = predict_from_raw_frame(
+    predicted, confidence, buffer_status, _, _ = predict_from_raw_frame(
         session_id=request.sessionId,
         frame=frame,
     )
