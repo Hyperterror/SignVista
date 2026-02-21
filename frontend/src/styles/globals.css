@@ -242,4 +242,36 @@
   .dark ::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #3A9295, #738A6E);
   }
+
+  /* --- Loading Screen Animations --- */
+  @keyframes bob {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-35px); }
+  }
+
+  @keyframes wave {
+    0%, 100% { transform: rotate(0deg); }
+    20%, 60% { transform: rotate(-15deg); }
+    40%, 80% { transform: rotate(15deg); }
+  }
+
+  @keyframes shadow-sync {
+    0%, 100% { transform: scale(1) scaleY(0.3); opacity: 0.15; }
+    50% { transform: scale(0.6) scaleY(0.3); opacity: 0.05; }
+  }
+
+  @keyframes dash {
+    0% { left: -40%; width: 20%; }
+    50% { left: 40%; width: 50%; opacity: 1; }
+    100% { left: 100%; width: 20%; opacity: 0.8; }
+  }
+
+  .animate-bob { animation: bob 4s ease-in-out infinite; }
+  .animate-wave { 
+    animation: wave 2.5s ease-in-out infinite; 
+    transform-origin: center bottom;
+    display: inline-block;
+  }
+  .animate-shadow-sync { animation: shadow-sync 4s ease-in-out infinite; }
+  .animate-dash { animation: dash 2.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
 }
