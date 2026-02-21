@@ -1,0 +1,39 @@
+# ISL Unified Project - Consolidated Dependencies
+# Organized by category with latest compatible versions
+
+# Core ML/DL Frameworks
+tensorflow>=2.13.0
+keras>=2.13.1
+
+# Computer Vision
+opencv-python>=4.7.0
+opencv-contrib-python>=4.7.0
+mediapipe>=0.10.2
+
+# Data Processing
+numpy>=1.24.2
+pandas>=1.5.3
+
+# Web Framework (for recognition API)
+fastapi>=0.100.1
+uvicorn>=0.23.1
+
+# Image Processing
+Pillow>=9.4.0
+
+# Video Processing
+sk-video>=1.1.10
+
+# Utilities
+python-dateutil>=2.8.2
+requests>=2.28.2
+
+# TensorBoard (for model monitoring)
+tensorboard>=2.11.2
+
+# Additional Dependencies
+protobuf>=3.19.6
+h5py>=3.8.0
+grpcio>=1.51.3
+Markdown>=3.4.1
+matplotlib>=3.7.1
