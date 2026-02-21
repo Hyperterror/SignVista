@@ -27,11 +27,13 @@ export default function ChatPage() {
     const [isToolboxOpen, setIsToolboxOpen] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const ws = useRef<WebSocket | null>(null);
+    const sessionId = api.getSessionId(); // My user ID
 
     useEffect(() => {
         const loadContacts = async () => {
             try {
-                const data = await api.getContacts();
+                const data = await api.get('/chat/contacts');
                 setContacts(data);
                 if (data.length > 0) setSelectedContact(data[0]);
             } catch (error) {
@@ -41,16 +43,48 @@ export default function ChatPage() {
             }
         };
         loadContacts();
-        gsap.fromTo('.chat-main', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' });
-    }, []);
+
+        if (sessionId && !ws.current) {
+            // Initialize WebSocket connection
+            const socket = new WebSocket(`ws://localhost:8001/api/chat/ws/${sessionId}`);
+            ws.current = socket;
+
+            socket.onopen = () => console.log("Chat WebSocket Connected");
+            socket.onmessage = (event) => {
+                try {
+                    const incomingMsg = JSON.parse(event.data);
+                    setMessages((prev) => [...prev, incomingMsg]);
+                } catch (e) {
+                    console.error("Failed to parse WS message", e);
+                }
+            };
+            socket.onerror = (err) => {
+                console.error("WS Error", err);
+                toast.error("WebSocket connection error");
+            };
+            socket.onclose = () => {
+                console.log("Chat WebSocket Disconnected");
+                ws.current = null;
+            };
+        }
+
+        // Cleanup socket on unmount
+        return () => {
+            if (ws.current) {
+                const socket = ws.current;
+                if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                    socket.close();
+                }
+                ws.current = null;
+            }
+        };
+    }, [sessionId]);
 
     useEffect(() => {
         if (selectedContact) {
-            const loadMessages = async () => {
-                const data = await api.getChatMessages(selectedContact.id);
-                setMessages(data);
-            };
-            loadMessages();
+            // For now, clear history and rely strictly on real-time broadcasts
+            // In a production app, we'd fetch SQLite history here.
+            setMessages([]);
         }
     }, [selectedContact]);
 
@@ -60,30 +94,28 @@ export default function ChatPage() {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim() || !selectedContact) return;
+        if (!newMessage.trim() || !selectedContact || !ws.current) return;
 
         const msgContent = newMessage;
         setNewMessage('');
 
-        // Optimistic UI
-        const tempMsg = {
-            id: Date.now().toString(),
-            sender_id: 'me',
+        const payload = {
             receiver_id: selectedContact.id,
             content: msgContent,
-            timestamp: Date.now() / 1000,
             type: 'text'
         };
-        setMessages(prev => [...prev, tempMsg]);
 
-        try {
-            await api.sendChatMessage(selectedContact.id, msgContent);
-        } catch (error) {
-            toast.error('Failed to send message');
-        }
+        // Send directly via WebSocket instead of HTTP POST
+        ws.current.send(JSON.stringify(payload));
     };
 
     if (isLoading) return <div className="h-screen flex items-center justify-center font-bold text-[#105F68]">Initializing Secure Chat...</div>;
+
+    // Filter messages for current thread view
+    const threadMessages = messages.filter(m =>
+        (m.sender_id === sessionId && m.receiver_id === selectedContact?.id) ||
+        (m.sender_id === selectedContact?.id && m.receiver_id === sessionId)
+    );
 
     return (
         <div className="chat-main h-[calc(100vh-2rem)] flex bg-white dark:bg-gray-900 rounded-[32px] shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800 m-4">
@@ -124,7 +156,7 @@ export default function ChatPage() {
                             <div className="flex-1 text-left min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
                                     <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">{contact.name}</h4>
-                                    <span className="text-[10px] text-gray-400 font-medium">12:30 PM</span>
+                                    <span className="text-[10px] text-gray-400 font-medium">Live</span>
                                 </div>
                                 <p className="text-xs text-gray-500 truncate dark:text-gray-400">{contact.last_message}</p>
                             </div>
@@ -174,10 +206,10 @@ export default function ChatPage() {
 
                         {/* Message Thread */}
                         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6 bg-gray-50/20 dark:bg-transparent">
-                            {messages.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.sender_id === 'me' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[70%] group relative ${msg.sender_id === 'me' ? 'items-end' : 'items-start'}`}>
-                                        <div className={`p-4 rounded-[24px] text-sm font-medium shadow-sm transition-all hover:shadow-md ${msg.sender_id === 'me' ? 'bg-[#105F68] text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-none'}`}>
+                            {threadMessages.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.sender_id === sessionId ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[70%] group relative flex flex-col ${msg.sender_id === sessionId ? 'items-end' : 'items-start'}`}>
+                                        <div className={`p-4 rounded-[24px] text-sm font-medium shadow-sm transition-all hover:shadow-md ${msg.sender_id === sessionId ? 'bg-[#105F68] text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-none'}`}>
                                             {msg.content}
                                         </div>
                                         <p className="text-[10px] text-gray-400 mt-2 font-bold px-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -198,7 +230,7 @@ export default function ChatPage() {
                                     type="text"
                                     value={newMessage}
                                     onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type a message..."
+                                    placeholder="Type a message to send over live WebSocket..."
                                     className="flex-1 bg-transparent border-none outline-none py-3 px-2 text-sm font-medium text-gray-900 dark:text-gray-100"
                                 />
                                 <button type="submit" className="p-4 bg-gradient-to-br from-[#105F68] to-[#3A9295] text-white rounded-2xl shadow-xl hover:scale-105 transition-transform"><Send className="w-5 h-5" /></button>
@@ -210,7 +242,7 @@ export default function ChatPage() {
                         <div className="w-24 h-24 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center text-5xl opacity-40 grayscale">💬</div>
                         <div>
                             <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100 mb-2">Select a Conversation</h3>
-                            <p className="text-gray-500 max-w-xs mx-auto">Click on a contact from the sidebar to start a real-time translation chat.</p>
+                            <p className="text-gray-500 max-w-xs mx-auto">Click on a contact from the sidebar to chat over real-time WebSockets.</p>
                         </div>
                     </div>
                 )}

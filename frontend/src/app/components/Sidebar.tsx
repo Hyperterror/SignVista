@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { api } from '../utils/api';
+import { useRouter } from 'next/navigation';
 import {
   Home,
   LayoutDashboard,
@@ -30,15 +31,26 @@ import {
   X,
   Sun,
   Moon,
-  Hand
+  Hand,
+  Bell
 } from 'lucide-react';
+import { SettingsDialog } from './SettingsDialog';
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [userData, setUserData] = useState<any>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -88,7 +100,7 @@ export function Sidebar() {
         initial={false}
         animate={{
           width: isHovered || isMobileOpen ? 280 : 88,
-          x: isMobileOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 0 : -280
+          x: isMounted && (isMobileOpen || window.innerWidth >= 1024) ? 0 : -280
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -165,38 +177,73 @@ export function Sidebar() {
               </motion.span>
             </button>
 
-            {/* Profile Brief */}
-            <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-3xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 flex-shrink-0 rounded-full bg-[#105F68] flex items-center justify-center text-white font-bold shadow-inner">
-                  {userData?.name?.substring(0, 2).toUpperCase() || 'UK'}
+            {/* Top Row: Notifications & Settings */}
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="flex-1 flex justify-center items-center py-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all relative"
+              >
+                <div className="relative">
+                  <Bell className="w-5 h-5 transition-transform hover:scale-110" />
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
                 </div>
-                <motion.div
-                  animate={{ opacity: (isHovered || isMobileOpen) ? 1 : 0, x: (isHovered || isMobileOpen) ? 0 : -10 }}
-                  className="flex-1 min-w-0"
-                >
-                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{userData?.name || 'Ujjwal Kumar'}</p>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                    {userData?.level ? `Level ${userData.level} Signer` : 'Level 5 Signer'}
-                  </p>
-                </motion.div>
-                {(isHovered || isMobileOpen) && (
-                  <button
-                    onClick={async () => {
-                      await api.logout();
-                      window.location.href = '/auth';
-                    }}
-                    className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors rounded-xl flex-shrink-0"
-                    title="Logout"
+              </button>
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex-1 flex justify-center items-center py-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+              >
+                <Settings className="w-5 h-5 transition-transform hover:rotate-90 duration-300" />
+              </button>
+            </div>
+
+            {/* Profile Brief */}
+            <div
+              onClick={() => router.push('/profile')}
+              className="block focus:outline-none cursor-pointer group"
+            >
+              <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-3xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden hover:border-[#105F68]/30 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 flex-shrink-0 rounded-full bg-[#105F68] flex items-center justify-center text-white font-bold shadow-inner">
+                    {userData?.name?.substring(0, 2).toUpperCase() || 'UK'}
+                  </div>
+                  <motion.div
+                    animate={{ opacity: (isHovered || isMobileOpen) ? 1 : 0, x: (isHovered || isMobileOpen) ? 0 : -10 }}
+                    className="flex-1 min-w-0"
                   >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                )}
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-[#105F68] transition-colors">{userData?.name || 'Ujjwal Kumar'}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                      {userData?.level ? `Level ${userData.level} Signer` : 'Level 5 Signer'}
+                    </p>
+                  </motion.div>
+                  {(isHovered || isMobileOpen) && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await api.logout();
+                        window.location.href = '/auth';
+                      }}
+                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors rounded-xl flex-shrink-0"
+                      title="Logout"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </motion.aside>
+
+      {/* Popovers */}
+      <SettingsDialog
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+      <NotificationsDropdown
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+      />
 
       {isMobileOpen && (
         <div

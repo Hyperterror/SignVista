@@ -3,7 +3,7 @@
  * Handles communication with the FastAPI backend.
  */
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8001/api';
 
 class ApiService {
     private sessionId: string;
@@ -72,6 +72,20 @@ class ApiService {
 
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
+            headers,
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response, endpoint);
+    }
+
+    async put(endpoint: string, data: any) {
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            method: 'PUT',
             headers,
             body: JSON.stringify(data)
         });
