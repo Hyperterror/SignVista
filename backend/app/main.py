@@ -19,6 +19,12 @@ from app.session_store import get_active_session_count
 from ml.inference import initialize_model, is_model_loaded
 from ml.vocabulary import NUM_CLASSES
 
+from app.database import engine
+from app import models
+
+# Ensure all database tables are created.
+models.Base.metadata.create_all(bind=engine)
+
 # ─── Logging Setup ────────────────────────────────────────────────
 
 logging.basicConfig(
@@ -78,15 +84,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://172.16.54.53:3000",
-        "http://172.16.54.53:3001",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -114,6 +113,7 @@ async def health_check():
 from app.routes import translate, learn, game, stats, vocabulary
 from app.routes import profile, text_to_sign, ar, community, auth
 from app.routes import dictionary, progress, history, achievements, dashboard, chat
+from app.routes import notifications, settings as settings_router
 
 # Auth
 app.include_router(auth.router)
@@ -138,6 +138,8 @@ app.include_router(achievements.router)
 app.include_router(dashboard.router)
 app.include_router(community.router)
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(notifications.router)
+app.include_router(settings_router.router)
 
 
 # ─── Root Redirect ────────────────────────────────────────────────

@@ -393,3 +393,31 @@ class AuthResponse(BaseModel):
     message: str = ""
     error: Optional[str] = None
 
+
+# ─── Notifications & Settings ──────────────────────────────────────
+
+class NotificationResponse(BaseModel):
+    id: int
+    title: str
+    message: str
+    type: str
+    is_read: bool
+    timestamp: float
+    action_url: Optional[str] = None
+
+class NotificationsListResponse(BaseModel):
+    unread_count: int
+    notifications: List[NotificationResponse]
+
+class UserSettingsResponse(BaseModel):
+    theme: str
+    notifications_enabled: bool
+    sound_enabled: bool
+    daily_goal_minutes: int
+    updated_at: float
+
+class UserSettingsUpdate(BaseModel):
+    theme: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+    sound_enabled: Optional[bool] = None
+    daily_goal_minutes: Optional[int] = None

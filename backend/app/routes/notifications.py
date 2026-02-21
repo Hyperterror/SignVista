@@ -20,11 +20,11 @@ router = APIRouter(prefix="/api", tags=["Notifications"])
 @router.get("/notifications/{session_id}", response_model=schemas.NotificationsListResponse)
 async def get_notifications(session_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch user logic notifications."""
-    if current_user.user_id != session_id:
+    if current_user["user_id"] != session_id:
         raise HTTPException(status_code=403, detail="Unauthorized access")
 
     notifications = db.query(models.Notification).filter(
-        models.Notification.user_id == current_user.user_id
+        models.Notification.user_id == current_user["user_id"]
     ).order_by(models.Notification.timestamp.desc()).all()
 
     unread_count = sum(1 for n in notifications if not n.is_read)
@@ -50,7 +50,7 @@ async def mark_read(notification_id: int, current_user: models.User = Depends(ge
     """Mark a specific notification as read."""
     notification = db.query(models.Notification).filter(
         models.Notification.id == notification_id,
-        models.Notification.user_id == current_user.user_id
+        models.Notification.user_id == current_user["user_id"]
     ).first()
 
     if not notification:
@@ -67,7 +67,7 @@ async def mark_read(notification_id: int, current_user: models.User = Depends(ge
 async def mark_all_read(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Mark all notifications as read for the user."""
     unread_notifications = db.query(models.Notification).filter(
-        models.Notification.user_id == current_user.user_id,
+        models.Notification.user_id == current_user["user_id"],
         models.Notification.is_read == False
     ).all()
 
