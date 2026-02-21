@@ -24,6 +24,7 @@ class RecognizeFrameResponse(BaseModel):
     confidence: float = Field(0.0, description="Prediction confidence 0.0-1.0")
     buffer_status: str = Field("collecting", description="'collecting' while building 45-frame buffer, 'ready' when predicting")
     history: List[str] = Field(default_factory=list, description="Last 5 predicted words for context")
+    module_details: Optional[Dict] = Field(None, description="Detailed module information (optional, only when requested)")
 
 
 # ─── Learn Mode ───────────────────────────────────────────────────
@@ -140,6 +141,7 @@ class HealthResponse(BaseModel):
     active_sessions: int = 0
     vocabulary_size: int = 0
     version: str = "1.0.0"
+    isl_modules: Optional[Dict] = Field(None, description="ISL module status and configuration")
 
 
 # ─── User Profile ────────────────────────────────────────────────

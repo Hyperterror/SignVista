@@ -106,7 +106,7 @@ async def game_attempt(request: GameAttemptRequest):
     frame = resize_frame(frame, target_width=640)
 
     # Run ML inference
-    predicted, confidence, buffer_status = predict_from_raw_frame(
+    predicted, confidence, buffer_status, _, _ = predict_from_raw_frame(
         session_id=f"{request.sessionId}_game_{request.gameId}",
         frame=frame,
     )

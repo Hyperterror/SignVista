@@ -19,7 +19,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Input dimensions
-KEYPOINT_DIM = 99  # 33 landmarks × 3 coords
+KEYPOINT_DIM = 258  # 132 Pose + 63 Left Hand + 63 Right Hand
 
 
 class FrameBuffer:

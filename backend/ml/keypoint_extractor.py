@@ -1,122 +1,64 @@
 """
 SignVista Keypoint Extractor
 
-Extracts 33 Pose landmarks from a video frame using Mediapipe.
-Produces a 99-dimensional feature vector (33 landmarks × 3 coords).
-
-Ishit: If you're also using Mediapipe Hands (21 landmarks), extend this
-       to concatenate both Pose + Hands features and update INPUT_SIZE.
+Extracts 258 features from a video frame using Mediapipe Holistic:
+- Pose: 33 landmarks × 4 (x, y, z, visibility) = 132
+- Left Hand: 21 landmarks × 3 (x, y, z) = 63
+- Right Hand: 21 landmarks × 3 (x, y, z) = 63
+- Total: 258 features
 """
 
 import logging
-
 import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Lazy-load mediapipe to avoid import errors in environments without it
-_pose = None
+# Lazy-load Mediapipe
+_holistic = None
 
-
-def _get_pose():
-    """Lazy-initialize Mediapipe Pose."""
-    global _pose
-    if _pose is None:
+def _get_holistic():
+    """Lazy-initialize Mediapipe Holistic."""
+    global _holistic
+    if _holistic is None:
         try:
             import mediapipe as mp
-            _pose = mp.solutions.pose.Pose(
+            _holistic = mp.solutions.holistic.Holistic(
                 static_image_mode=False,
-                model_complexity=1,       # 0=lite, 1=full, 2=heavy
-                enable_segmentation=False,
+                model_complexity=1,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
             )
-            logger.info("✅ Mediapipe Pose initialized successfully")
+            logger.info("✅ Mediapipe Holistic initialized")
         except ImportError:
-            logger.warning("⚠️ Mediapipe not installed — keypoint extraction will use mock data")
-            _pose = "unavailable"
-        except Exception as e:
-            logger.error(f"❌ Mediapipe Pose init failed: {e}")
-            _pose = "unavailable"
-    return _pose
+            logger.warning("⚠️ Mediapipe not installed")
+            _holistic = "unavailable"
+    return _holistic
 
-
-def extract_keypoints(frame: np.ndarray) -> np.ndarray:
+def extract_keypoints(frame: np.ndarray, return_results: bool = False) -> tuple[np.ndarray, any]:
     """
-    Extract 33 Pose landmarks from a BGR frame.
-
-    Args:
-        frame: BGR image array from OpenCV
-
-    Returns:
-        np.ndarray of shape (99,) — flattened [x1, y1, z1, x2, y2, z2, ...]
-        Returns zeros if no pose detected.
+    Extract 258 features [Pose(132), LH(63), RH(63)].
     """
-    pose = _get_pose()
-
-    if pose == "unavailable":
-        # Mock: return random keypoints for testing without Mediapipe
-        return np.random.randn(99).astype(np.float32) * 0.1
+    holistic = _get_holistic()
+    if holistic == "unavailable":
+        return np.zeros(258, dtype=np.float32), None
 
     try:
-        # Mediapipe expects RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(frame_rgb)
+        results = holistic.process(frame_rgb)
 
-        if results.pose_landmarks:
-            landmarks = results.pose_landmarks.landmark
-            # Flatten: [x1, y1, z1, x2, y2, z2, ...] = 33 × 3 = 99
-            keypoints = np.array([
-                [lm.x, lm.y, lm.z] for lm in landmarks
-            ]).flatten().astype(np.float32)
-            return keypoints
-        else:
-            # No pose detected — return zeros
-            logger.debug("No pose landmarks detected in frame")
-            return np.zeros(99, dtype=np.float32)
+        # 1. Pose (33 * 4 = 132)
+        pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(132)
+        
+        # 2. Left Hand (21 * 3 = 63)
+        lh = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(63)
+        
+        # 3. Right Hand (21 * 3 = 63)
+        rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(63)
+
+        keypoints = np.concatenate([pose, lh, rh]).astype(np.float32)
+        return keypoints, (results if return_results else None)
 
     except Exception as e:
-        logger.error(f"Keypoint extraction error: {e}")
-        return np.zeros(99, dtype=np.float32)
-
-
-def extract_hand_keypoints(frame: np.ndarray) -> np.ndarray:
-    """
-    Extract 21 Hand landmarks using Mediapipe Hands.
-    Used for static alphabet recognition (Maitree ANN model).
-
-    Ishit: Implement this if using Maitree's hand-based model.
-
-    Args:
-        frame: BGR image array
-
-    Returns:
-        np.ndarray of shape (63,) — 21 landmarks × 3 coords
-        Returns zeros if no hand detected.
-    """
-    try:
-        import mediapipe as mp
-        mp_hands = mp.solutions.hands.Hands(
-            static_image_mode=True,
-            max_num_hands=2,
-            min_detection_confidence=0.5,
-        )
-
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = mp_hands.process(frame_rgb)
-
-        if results.multi_hand_landmarks:
-            hand = results.multi_hand_landmarks[0]
-            keypoints = np.array([
-                [lm.x, lm.y, lm.z] for lm in hand.landmark
-            ]).flatten().astype(np.float32)
-            mp_hands.close()
-            return keypoints
-
-        mp_hands.close()
-        return np.zeros(63, dtype=np.float32)
-
-    except Exception as e:
-        logger.error(f"Hand keypoint extraction error: {e}")
-        return np.zeros(63, dtype=np.float32)
+        logger.error(f"Holistic extraction error: {e}")
+        return np.zeros(258, dtype=np.float32), None
