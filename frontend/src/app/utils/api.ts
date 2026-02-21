@@ -3,17 +3,22 @@
  * Handles communication with the FastAPI backend.
  */
 
-const getBackendOrigin = () => {
+const getHost = () => {
     if (typeof window !== 'undefined') {
-        return `${window.location.hostname}:8001`;
+        const hostname = window.location.hostname;
+        return hostname === 'localhost' ? '127.0.0.1:8001' : `${hostname}:8001`;
     }
-    return 'localhost:8001';
+    return '127.0.0.1:8001';
 };
 
-const HOST = getBackendOrigin();
-export const BACKEND_ORIGIN = `http://${HOST}`;
-export const WS_ORIGIN = `ws://${HOST}`;
-export const API_BASE_URL = `${BACKEND_ORIGIN}/api`;
+export const getBackendOrigin = () => `http://${getHost()}`;
+export const getWsOrigin = () => `ws://${getHost()}`;
+export const getApiBaseUrl = () => `${getBackendOrigin()}/api`;
+
+// For backward compatibility keep the constants but make them use the getters
+export const BACKEND_ORIGIN = getBackendOrigin();
+export const WS_ORIGIN = getWsOrigin();
+export const API_BASE_URL = getApiBaseUrl();
 
 class ApiService {
     private sessionId: string;

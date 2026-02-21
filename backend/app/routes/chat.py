@@ -5,7 +5,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from ..database import get_db
 
-router = APIRouter()
+router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 # Connection Manager for WebSockets
 class ConnectionManager:
@@ -29,6 +29,7 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    print(f"WS connection attempt for user: {user_id}")
     await manager.connect(websocket, user_id)
     try:
         while True:

@@ -14,7 +14,7 @@ import {
     ChevronLeft,
     Sparkles
 } from 'lucide-react';
-import { api, WS_ORIGIN } from '../utils/api';
+import { api, getWsOrigin } from '../utils/api';
 import SignToolbox from '../components/chat/SignToolbox';
 import { toast } from 'sonner';
 import gsap from 'gsap';
@@ -46,7 +46,10 @@ export default function ChatPage() {
 
         if (sessionId && !ws.current) {
             // Initialize WebSocket connection
-            const socket = new WebSocket(`${WS_ORIGIN}/api/chat/ws/${sessionId}`);
+            const wsOrigin = getWsOrigin();
+            const wsUrl = `${wsOrigin}/api/chat/ws/${sessionId}`;
+            console.log("Connecting to WS:", wsUrl);
+            const socket = new WebSocket(wsUrl);
             ws.current = socket;
 
             socket.onopen = () => console.log("Chat WebSocket Connected");
@@ -59,7 +62,7 @@ export default function ChatPage() {
                 }
             };
             socket.onerror = (err) => {
-                console.error("WS Error", err);
+                console.error("WS Error Details:", err);
                 toast.error("WebSocket connection error");
             };
             socket.onclose = () => {

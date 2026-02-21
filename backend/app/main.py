@@ -137,7 +137,7 @@ app.include_router(history.router)
 app.include_router(achievements.router)
 app.include_router(dashboard.router)
 app.include_router(community.router)
-app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(chat.router)
 app.include_router(notifications.router)
 app.include_router(settings_router.router)
 
