@@ -14,7 +14,7 @@ import {
     ChevronLeft,
     Sparkles
 } from 'lucide-react';
-import { api, getWsOrigin } from '../utils/api';
+import { api, WS_ORIGIN } from '../utils/api';
 import SignToolbox from '../components/chat/SignToolbox';
 import { toast } from 'sonner';
 import gsap from 'gsap';

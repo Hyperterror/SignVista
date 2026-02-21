@@ -29,7 +29,10 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
+<<<<<<< HEAD
     print(f"WS connection attempt for user: {user_id}")
+=======
+>>>>>>> my-branch
     await manager.connect(websocket, user_id)
     try:
         while True:
