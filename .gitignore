@@ -45,3 +45,10 @@ backend/*.db
 backend/*.log
 backend/uvicorn_*.txt
 backend/backend.log
+backend/ws_test.py
+backend/versions.txt
+backend/backend/
+
+# IDE
+.kiro/
+.vscode/
