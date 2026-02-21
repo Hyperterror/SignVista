@@ -1,0 +1,41 @@
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+.env*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vercel
+
+# Python
+venv/
+venv_native/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+.pytest_cache/
+
+# Git
+.DS_Store
+Thumbs.db
+
+# SignVista Specific
+backend/users_db.json
+backend/test_out.txt
+backend/test_output.txt
