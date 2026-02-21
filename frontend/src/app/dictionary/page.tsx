@@ -100,7 +100,7 @@ export default function DictionaryPage() {
                 {/* Header */}
                 <div className="mb-12">
                     <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                        SignBridge Dictionary
+                        SignVista Dictionary
                     </h1>
                     <p className="text-xl text-gray-600 dark:text-gray-400">
                         Explore {words.length} Indian Sign Language words with video demonstrations

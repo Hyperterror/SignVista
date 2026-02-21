@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { Camera, CameraOff, RefreshCw, Layers, Brain, Zap, Info } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, Layers, Brain, Zap, Info, History as HistoryIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
 
@@ -21,6 +21,7 @@ interface ARResponse {
     prediction: string | null;
     confidence: number;
     gesture_hint: string;
+    history: string[];
 }
 
 export default function ARRecognizePage() {
@@ -31,27 +32,32 @@ export default function ARRecognizePage() {
     const [prediction, setPrediction] = useState<string | null>(null);
     const [confidence, setConfidence] = useState(0);
     const [hint, setHint] = useState('Position yourself in view to start');
+    const [history, setHistory] = useState<string[]>([]);
     const [stats, setStats] = useState({ fps: 0, latency: 0 });
     const requestRef = useRef<number>();
     const lastTimeRef = useRef<number>(0);
     const lastSpokenRef = useRef<string>('');
+    const lastPredictionRef = useRef<string | null>(null);
 
     useEffect(() => {
         gsap.fromTo('.camera-main', { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: 'power3.out' });
     }, []);
 
     useEffect(() => {
-        if (prediction && isActive && prediction !== lastSpokenRef.current) {
+        if (prediction && isActive && prediction !== lastSpokenRef.current && confidence > 0.7) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(prediction);
-                utterance.rate = 0.9;
+                utterance.rate = 1.0;
+                utterance.pitch = 1.1;
                 window.speechSynthesis.speak(utterance);
                 lastSpokenRef.current = prediction;
+
+                toast.info(`Speaking: ${prediction}`, { icon: '🔊', duration: 2000 });
             }
         }
         if (!prediction) lastSpokenRef.current = '';
-    }, [prediction, isActive]);
+    }, [prediction, isActive, confidence]);
 
     const startCamera = async () => {
         try {
@@ -104,7 +110,13 @@ export default function ARRecognizePage() {
 
             setPrediction(data.prediction);
             setConfidence(data.confidence);
+            setHistory(data.history || []);
             setHint(data.gesture_hint || (data.face_detected ? 'Listening for signs...' : 'Face not detected'));
+
+            if (data.prediction && data.prediction !== lastPredictionRef.current) {
+                lastPredictionRef.current = data.prediction;
+                gsap.fromTo('.prediction-badge', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
+            }
 
             if (isARMode) {
                 drawAROverlay(data);
@@ -220,7 +232,7 @@ export default function ARRecognizePage() {
                 <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-[#105F68] to-[#3A9295] bg-clip-text text-transparent">
-                            SignBridge: AR Translate
+                            SignVista: AR Translate
                         </h1>
                         <p className="text-gray-600 dark:text-gray-400 mt-2">
                             Instant ISL recognition with augmented reality overlays and voice feedback
@@ -275,20 +287,28 @@ export default function ARRecognizePage() {
                             </div>
 
                             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6">
-                                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 text-center text-white shadow-2xl">
+                                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 text-white shadow-2xl relative overflow-hidden">
+                                    {hint && hint !== 'Listening for signs...' && (
+                                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 to-orange-500 animate-pulse" />
+                                    )}
                                     {prediction ? (
-                                        <div className="animate-in fade-in zoom-in duration-300">
+                                        <div className="prediction-badge animate-in fade-in zoom-in duration-300">
                                             <p className="text-sm opacity-60 uppercase tracking-widest mb-1">Detected Word</p>
                                             <h2 className="text-5xl font-black mb-2 tracking-tight">{prediction}</h2>
                                             <div className="flex items-center justify-center gap-2">
                                                 <div className="w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-[#63C1BB] transition-all duration-300"
+                                                        className={`h-full transition-all duration-300 ${confidence > 0.7 ? 'bg-[#63C1BB]' : 'bg-yellow-500'}`}
                                                         style={{ width: `${confidence * 100}%` }}
                                                     />
                                                 </div>
                                                 <span className="text-xs font-bold">{Math.round(confidence * 100)}%</span>
                                             </div>
+                                            {hint && hint !== 'Listening for signs...' && (
+                                                <p className="mt-3 text-sm font-bold text-yellow-400 bg-yellow-400/10 py-1 rounded-lg border border-yellow-400/20">
+                                                    ⚠️ {hint}
+                                                </p>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center gap-3">
@@ -330,6 +350,25 @@ export default function ARRecognizePage() {
                                     <span className="text-sm text-gray-500">Accuracy</span>
                                     <span className="font-bold text-[#105F68]">{Math.round(confidence * 100)}%</span>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Multi-Word History */}
+                        <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-xl border border-gray-100 dark:border-gray-700">
+                            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                <HistoryIcon className="w-6 h-6 text-[#105F68]" /> Translation History
+                            </h3>
+                            <div className="space-y-3">
+                                {history.length > 0 ? history.map((word, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-l-4 border-[#105F68] animate-in slide-in-from-left duration-300" style={{ animationDelay: `${i * 0.1}s` }}>
+                                        <span className="font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide">{word}</span>
+                                        <span className="text-[10px] text-gray-400">{i === 0 ? 'Latest' : `${i} predictions ago`}</span>
+                                    </div>
+                                )) : (
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-gray-400">No history yet</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

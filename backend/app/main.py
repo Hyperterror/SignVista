@@ -1,5 +1,5 @@
 """
-SignBridge Backend — FastAPI Application
+SignVista Backend — FastAPI Application
 
 Main entry point. Initializes the ML model on startup,
 configures CORS, and mounts all route routers.
@@ -78,7 +78,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -105,8 +110,11 @@ async def health_check():
 # ─── Mount Route Routers ─────────────────────────────────────────
 
 from app.routes import translate, learn, game, stats, vocabulary
-from app.routes import profile, text_to_sign, ar
-from app.routes import dictionary, progress, history, achievements, dashboard
+from app.routes import profile, text_to_sign, ar, community, auth
+from app.routes import dictionary, progress, history, achievements, dashboard, chat
+
+# Auth
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 
 # Phase 1
 app.include_router(translate.router)
@@ -126,6 +134,8 @@ app.include_router(progress.router)
 app.include_router(history.router)
 app.include_router(achievements.router)
 app.include_router(dashboard.router)
+app.include_router(community.router, prefix="/api/community", tags=["Community"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 
 # ─── Root Redirect ────────────────────────────────────────────────

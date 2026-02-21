@@ -324,3 +324,72 @@ class DashboardResponse(BaseModel):
     best_game_score: int
     suggested_next_words: List[str]
 
+
+# ─── Community Hub ───────────────────────────────────────────────
+
+class Comment(BaseModel):
+    id: str
+    user_name: str
+    content: str
+    timestamp: float
+
+class CommunityPost(BaseModel):
+    id: str
+    user_name: str
+    avatar_initials: str
+    content: str
+    likes: int
+    comments_count: int
+    comments: List[Comment] = Field(default_factory=list)
+    timestamp: float
+    is_official: bool = False
+    achievement_text: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+class CreatePostRequest(BaseModel):
+    sessionId: str
+    content: str
+    tags: List[str] = Field(default_factory=list)
+
+class LikeRequest(BaseModel):
+    sessionId: str
+    postId: str
+
+class CommunityFeedResponse(BaseModel):
+    posts: List[CommunityPost]
+
+class ActiveUser(BaseModel):
+    name: str
+    initials: str
+    is_online: bool = True
+
+class ActiveUsersResponse(BaseModel):
+    users: List[ActiveUser]
+
+
+# ─── Authentication ───────────────────────────────────────────────
+
+class AuthRegisterRequest(BaseModel):
+    """POST /api/auth/register"""
+    name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(...)
+    phone: str = Field(..., min_length=10, max_length=15)
+    password: str = Field(..., min_length=6)
+    preferred_language: str = Field("en", description="'en' or 'hi'")
+
+class AuthLoginRequest(BaseModel):
+    """POST /api/auth/login"""
+    phone: str = Field(...)
+    password: str = Field(...)
+
+class AuthResponse(BaseModel):
+    """Authentication response payload."""
+    status: str = "ok"
+    sessionId: str
+    user_name: str
+    email: str
+    access_token: Optional[str] = None
+    token_type: str = "bearer"
+    message: str = ""
+    error: Optional[str] = None
+
