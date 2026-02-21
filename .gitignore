@@ -37,5 +37,11 @@ Thumbs.db
 
 # SignVista Specific
 backend/users_db.json
+backend/users_db.json.bak
 backend/test_out.txt
 backend/test_output.txt
+backend/signvista.db
+backend/*.db
+backend/*.log
+backend/uvicorn_*.txt
+backend/backend.log
