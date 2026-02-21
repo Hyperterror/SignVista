@@ -110,3 +110,29 @@ class Notification(Base):
     action_url = Column(String(200), nullable=True) # Optional link to click
 
     user = relationship("User", back_populates="notifications")
+
+
+class CommunityPostBase(Base):
+    """Global community feed posts."""
+    __tablename__ = "community_posts"
+
+    id = Column(String(50), primary_key=True, index=True)
+    user_name = Column(String(100), nullable=False)
+    avatar_initials = Column(String(10), nullable=False)
+    content = Column(Text, nullable=False)
+    likes = Column(Integer, default=0)
+    comments_count = Column(Integer, default=0)
+    timestamp = Column(Float, default=time.time)
+    is_official = Column(Boolean, default=False)
+    achievement_text = Column(String(200), nullable=True)
+    tags = Column(JSON, default=list)
+
+class CommunityCommentBase(Base):
+    """Replies to community posts."""
+    __tablename__ = "community_comments"
+
+    id = Column(String(50), primary_key=True, index=True)
+    post_id = Column(String(50), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True)
+    user_name = Column(String(100), nullable=False)
+    content = Column(Text, nullable=False)
+    timestamp = Column(Float, default=time.time)

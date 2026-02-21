@@ -32,6 +32,7 @@ export default function LearningPage() {
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [overallProgress, setOverallProgress] = useState(0);
     const [streak, setStreak] = useState(0);
+    const [stats, setStats] = useState({ totalWords: 15, practicedWords: 0 });
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -45,6 +46,10 @@ export default function LearningPage() {
 
                 setOverallProgress(Math.round((progress?.overall_proficiency ?? 0) * 100));
                 setStreak(dashboard?.current_streak ?? 0);
+                setStats({
+                    totalWords: dashboard?.total_achievements ?? 15, // Currently total available words
+                    practicedWords: dashboard?.words_practiced ?? 0
+                });
 
                 const words = progress?.word_details || [];
                 const categories = [...new Set(words.map((w: any) => w.category || 'Common'))];
@@ -84,20 +89,27 @@ export default function LearningPage() {
             }
         };
 
-        fetchData();
+        const animateIn = () => {
+            if (document.querySelector('.stats-card')) {
+                gsap.fromTo(
+                    '.stats-card',
+                    { y: 50, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.6, stagger: 0.1, ease: 'back.out(1.7)' }
+                );
+            }
 
-        // Entrance animations
-        gsap.fromTo(
-            '.stats-card',
-            { y: 50, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.6, stagger: 0.1, ease: 'back.out(1.7)' }
-        );
+            if (document.querySelector('.lesson-card')) {
+                gsap.fromTo(
+                    '.lesson-card',
+                    { x: -50, opacity: 0 },
+                    { x: 0, opacity: 1, duration: 0.6, stagger: 0.1, delay: 0.3, ease: 'power3.out' }
+                );
+            }
+        };
 
-        gsap.fromTo(
-            '.lesson-card',
-            { x: -50, opacity: 0 },
-            { x: 0, opacity: 1, duration: 0.6, stagger: 0.1, delay: 0.3, ease: 'power3.out' }
-        );
+        fetchData().then(() => {
+            requestAnimationFrame(animateIn);
+        });
     }, []);
 
     const startLesson = (lesson: Lesson) => {
@@ -141,7 +153,12 @@ export default function LearningPage() {
                 </div>
 
                 {/* Main Dashboard Cards */}
-                <StatsDashboard />
+                <StatsDashboard
+                    totalWords={stats.totalWords}
+                    practiced={stats.practicedWords}
+                    proficiency={overallProgress}
+                    streak={streak}
+                />
 
                 {/* Tabbed Interactive Area */}
                 <TabbedLearningPanel />

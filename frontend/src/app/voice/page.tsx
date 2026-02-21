@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Mic, MicOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '../utils/api';
+import { api, BACKEND_ORIGIN } from '../utils/api';
 
 interface SignWord {
     word: string;
@@ -246,7 +246,7 @@ export default function VoiceToSignPage() {
                                         <div className="relative aspect-video rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg border border-gray-100 dark:border-gray-700 hover:shadow-2xl transition-all duration-300">
                                             {sign.found ? (
                                                 <img
-                                                    src={`http://localhost:8001${sign.gif_url}`}
+                                                    src={`${BACKEND_ORIGIN}${sign.gif_url}`}
                                                     alt={sign.display_name}
                                                     className="w-full h-full object-cover"
                                                 />
