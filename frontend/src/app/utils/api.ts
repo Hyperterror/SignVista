@@ -3,20 +3,23 @@
  * Handles communication with the FastAPI backend.
  */
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 class ApiService {
     private sessionId: string;
+    private token: string | null = null;
 
     constructor() {
-        // Default session ID
+        // Default values
         this.sessionId = 'temp_guest';
 
         // Only access localStorage in the browser
         if (typeof window !== 'undefined') {
-            const stored = localStorage.getItem('signvista_session_id');
-            if (stored) {
-                this.sessionId = stored;
+            this.token = localStorage.getItem('signvista_access_token');
+            const storedSession = localStorage.getItem('signvista_session_id');
+
+            if (storedSession) {
+                this.sessionId = storedSession;
             } else {
                 this.sessionId = 'user_' + Math.random().toString(36).substring(2, 11);
                 localStorage.setItem('signvista_session_id', this.sessionId);
@@ -28,25 +31,51 @@ class ApiService {
         return this.sessionId;
     }
 
-    async get(endpoint: string) {
-        try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`);
-            if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-            return await response.json();
-        } catch (error) {
-            console.warn(`[Mock API] Failed to fetch ${endpoint}, returning empty fallback.`);
-            return []; // Safe fallback for mapping
+    private async handleResponse(response: Response, endpoint: string) {
+        if (response.status === 401) {
+            // Don't redirect if we are already trying to login or register
+            if (endpoint.includes('/auth/login') || endpoint.includes('/auth/register')) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Invalid credentials');
+            }
+
+            // Unauthorized - token is likely invalid or expired for other protected routes
+            this.setSession('guest_' + Math.random().toString(36).substring(2, 11), null);
+            if (typeof window !== 'undefined') {
+                window.location.href = '/auth';
+            }
+            throw new Error('Unauthorized - redirects to login');
         }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `API Error: ${response.statusText}`);
+        }
+        return response.json();
+    }
+
+    async get(endpoint: string) {
+        const headers: any = {};
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers });
+        return this.handleResponse(response, endpoint);
     }
 
     async post(endpoint: string, data: any) {
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        return response.json();
+        return this.handleResponse(response, endpoint);
     }
 
     // Feature Endpoints
@@ -91,6 +120,10 @@ class ApiService {
         return this.get(`/achievements/${this.sessionId}`);
     }
 
+    async getMe() {
+        return this.get(`/profile/${this.sessionId}`);
+    }
+
     async getProfile() {
         return this.get(`/profile/${this.sessionId}`);
     }
@@ -103,6 +136,89 @@ class ApiService {
             phone,
             preferred_language: 'en'
         });
+    }
+
+    // Chat Endpoints
+    async getContacts() {
+        return this.get('/chat/contacts');
+    }
+
+    async getChatMessages(contactId: string) {
+        return this.get(`/chat/messages/${contactId}`);
+    }
+
+    async sendChatMessage(receiverId: string, content: string, type: string = 'text') {
+        const id = 'msg_' + Math.random().toString(36).substring(2, 11);
+        return this.post('/chat/send', {
+            id,
+            sender_id: 'me',
+            receiver_id: receiverId,
+            content,
+            timestamp: Date.now() / 1000,
+            type
+        });
+    }
+
+    // Community Endpoints
+    async getCommunityFeed() {
+        return this.get('/community/feed');
+    }
+
+    async createPost(content: string, tags: string[] = []) {
+        return this.post('/community/post', {
+            sessionId: this.sessionId,
+            content,
+            tags
+        });
+    }
+
+    async likePost(postId: string) {
+        return this.post('/community/like', {
+            sessionId: this.sessionId,
+            postId
+        });
+    }
+
+    async getActiveUsers() {
+        return this.get('/community/active-users');
+    }
+
+    // Auth Endpoints
+    async login(phone: string, password: string) {
+        const result = await this.post('/auth/login', { phone, password });
+        if (result.status === 'ok') {
+            this.setSession(result.sessionId, result.access_token);
+        }
+        return result;
+    }
+
+    async register(data: any) {
+        const result = await this.post('/auth/register', data);
+        if (result.status === 'ok') {
+            this.setSession(result.sessionId, result.access_token);
+        }
+        return result;
+    }
+
+    async logout() {
+        try {
+            await this.post('/auth/logout', {});
+        } finally {
+            this.setSession('guest_' + Math.random().toString(36).substring(2, 11), null);
+        }
+    }
+
+    private setSession(sessionId: string, token: string | null) {
+        this.sessionId = sessionId;
+        this.token = token;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('signvista_session_id', sessionId);
+            if (token) {
+                localStorage.setItem('signvista_access_token', token);
+            } else {
+                localStorage.removeItem('signvista_access_token');
+            }
+        }
     }
 }
 

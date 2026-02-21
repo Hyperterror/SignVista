@@ -91,7 +91,7 @@ export default function TextToSignPage() {
                     <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent"
                         style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295)' }}
                     >
-                        SignBridge Text
+                        SignVista Text
                     </h1>
                     <p className="text-xl text-gray-600 dark:text-gray-400">
                         Convert your text into Indian Sign Language gestures in real-time

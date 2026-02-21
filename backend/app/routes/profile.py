@@ -12,7 +12,8 @@ import time
 import logging
 from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.dependencies import get_current_user
 
 from app.schemas import ProfileCreateRequest, ProfileResponse
 from app.session_store import get_session
@@ -32,15 +33,15 @@ _profiles: Dict[str, Dict] = {}
 # ─── Welcome Messages ────────────────────────────────────────────
 
 WELCOME_MESSAGES = {
-    "en": "Welcome to SignBridge, {name}! 🖐️ Let's bridge the communication gap together.",
-    "hi": "साइनब्रिज में आपका स्वागत है, {name}! 🖐️ आइए साथ मिलकर संवाद की खाई पाटें।",
+    "en": "Welcome to SignVista, {name}! 🖐️ Let's bridge the communication gap together.",
+    "hi": "साइनविस्टा में आपका स्वागत है, {name}! 🖐️ आइए साथ मिलकर संवाद की खाई पाटें।",
 }
 
 WELCOME_SIGN_WORDS = ["hello", "good", "friend"]  # Words shown as sign greeting
 
 
 @router.post("/profile", response_model=ProfileResponse)
-async def create_profile(request: ProfileCreateRequest):
+async def create_profile(request: ProfileCreateRequest, current_user: dict = Depends(get_current_user)):
     """
     Create or update a user profile after onboarding form.
 
@@ -113,7 +114,7 @@ async def create_profile(request: ProfileCreateRequest):
 
 
 @router.get("/profile/{session_id}", response_model=ProfileResponse)
-async def get_profile(session_id: str):
+async def get_profile(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get user profile and welcome data.
 
@@ -124,7 +125,21 @@ async def get_profile(session_id: str):
 
     profile = _profiles.get(session_id)
     if profile is None:
-        raise HTTPException(status_code=404, detail="Profile not found. Create one with POST /api/profile first.")
+        # Fallback: Check if this session belongs to the current authenticated user
+        if current_user["user_id"] == session_id:
+            logger.info(f"Dynamically generating profile for session {session_id}")
+            profile = {
+                "sessionId": current_user["user_id"],
+                "name": current_user["name"],
+                "email": current_user["email"],
+                "phone": current_user["phone"],
+                "preferred_language": current_user.get("preferred_language", "en"),
+                "created_at": current_user.get("created_at", time.time()),
+            }
+            # Cache it to prevent redundant lookups
+            _profiles[session_id] = profile
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found. Create one with POST /api/profile first.")
 
     lang = profile["preferred_language"]
     welcome_msg = WELCOME_MESSAGES.get(lang, WELCOME_MESSAGES["en"]).format(

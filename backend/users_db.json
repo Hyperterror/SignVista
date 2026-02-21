@@ -1,0 +1,20 @@
+{
+    "5554443332": {
+        "user_id": "33fb2355",
+        "name": "Persistence User",
+        "email": "p@p.com",
+        "phone": "5554443332",
+        "password": "$5$rounds=535000$fVf3TzOa1b1CTftN$UULm/Z9l.bFkOHNmqdd3LRTtNOPNsGax05FOoQuRkl7",
+        "preferred_language": "en",
+        "created_at": 1771626414.4753237
+    },
+    "9376666070": {
+        "user_id": "ae92a9d8",
+        "name": "Shourya Bansal",
+        "email": "shouryabansal45@gmail.com",
+        "phone": "9376666070",
+        "password": "$5$rounds=535000$bBARnX.K4B85RrNQ$R4CNRr0J7YYJT3PnU0SkxA4U06NtQjsCrbUINRbBx1.",
+        "preferred_language": "en",
+        "created_at": 1771626795.0851057
+    }
+}

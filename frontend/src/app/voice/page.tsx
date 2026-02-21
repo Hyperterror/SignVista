@@ -126,6 +126,20 @@ export default function VoiceToSignPage() {
 
                 if (response.matched_words > 0) {
                     toast.success(`Found ${response.matched_words} signs!`);
+
+                    // TTS for translated words
+                    if ('speechSynthesis' in window) {
+                        const textToSpeak = response.words
+                            .filter((s: any) => s.found)
+                            .map((s: any) => s.display_name)
+                            .join(', ');
+                        if (textToSpeak) {
+                            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                            utterance.rate = 0.9;
+                            window.speechSynthesis.speak(utterance);
+                        }
+                    }
+
                     response.words.forEach((_: any, index: number) => {
                         gsap.fromTo(`.voice-sign-${index}`, { scale: 0, y: 50, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: 0.5, delay: index * 0.1, ease: 'back.out(2)' });
                     });
@@ -151,7 +165,7 @@ export default function VoiceToSignPage() {
                     <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent"
                         style={{ backgroundImage: 'linear-gradient(to right, #344C3D, #3A9295)' }}
                     >
-                        SignBridge Voice
+                        SignVista Voice
                     </h1>
                     <p className="text-xl text-gray-600 dark:text-gray-400">
                         Speak naturally and watch your words transform into ISL gestures
