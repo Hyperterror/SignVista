@@ -83,6 +83,8 @@ app.add_middleware(
         "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "http://172.16.54.53:3000",
+        "http://172.16.54.53:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -114,7 +116,7 @@ from app.routes import profile, text_to_sign, ar, community, auth
 from app.routes import dictionary, progress, history, achievements, dashboard, chat
 
 # Auth
-app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(auth.router)
 
 # Phase 1
 app.include_router(translate.router)
@@ -134,7 +136,7 @@ app.include_router(progress.router)
 app.include_router(history.router)
 app.include_router(achievements.router)
 app.include_router(dashboard.router)
-app.include_router(community.router, prefix="/api/community", tags=["Community"])
+app.include_router(community.router)
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 
