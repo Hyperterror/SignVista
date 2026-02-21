@@ -14,7 +14,7 @@ import {
     ChevronLeft,
     Sparkles
 } from 'lucide-react';
-import { api, WS_ORIGIN } from '../utils/api';
+import { api, getWsOrigin } from '../utils/api';
 import SignToolbox from '../components/chat/SignToolbox';
 import { toast } from 'sonner';
 import gsap from 'gsap';
@@ -54,7 +54,6 @@ export default function ChatPage() {
             const wsOrigin = getWsOrigin();
             const wsUrl = `${wsOrigin}/api/chat/ws/${sessionId}`;
             console.log("Connecting to WS:", wsUrl);
-
             const socket = new WebSocket(wsUrl);
             ws.current = socket;
 
@@ -75,6 +74,7 @@ export default function ChatPage() {
                     console.error("Failed to parse WS message", e);
                 }
             };
+
 
             socket.onerror = (err: any) => {
                 // Ignore errors if we are unmounting or if it's a transient handshake close
