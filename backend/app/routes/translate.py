@@ -23,7 +23,10 @@ router = APIRouter(prefix="/api", tags=["Translate"])
 
 
 @router.post("/recognize-frame", response_model=RecognizeFrameResponse)
-async def recognize_frame(request: RecognizeFrameRequest):
+async def recognize_frame(
+    request: RecognizeFrameRequest,
+    return_module_details: bool = False
+):
     """
     Process a single camera frame and return the predicted ISL word.
 
@@ -34,6 +37,11 @@ async def recognize_frame(request: RecognizeFrameRequest):
     4. Buffer 45 frames
     5. LSTM prediction
     6. Return word + confidence
+
+    Args:
+        request: Frame data with sessionId and base64 frame
+        return_module_details: Optional query parameter to include detailed module information
+                               in the response (active modules, all predictions, timing info)
 
     Ayush sends:
     ```json
@@ -60,11 +68,20 @@ async def recognize_frame(request: RecognizeFrameRequest):
     # Resize for performance
     frame = resize_frame(frame, target_width=640)
 
-    # Run ML inference pipeline
-    word, confidence, buffer_status = predict_from_raw_frame(
+    # Run ML inference pipeline (with landmarks for AR mapping if needed)
+    word, confidence, buffer_status, _, module_details = predict_from_raw_frame(
         session_id=request.sessionId,
         frame=frame,
+        return_module_details=return_module_details
     )
+
+    # Rank predictions by confidence in descending order if module_details present
+    if module_details and "predictions" in module_details:
+        module_details["predictions"] = sorted(
+            module_details["predictions"],
+            key=lambda p: p["confidence"],
+            reverse=True
+        )
 
     # Update session history
     session = get_session(request.sessionId)
@@ -76,4 +93,5 @@ async def recognize_frame(request: RecognizeFrameRequest):
         confidence=round(confidence, 3),
         buffer_status=buffer_status,
         history=session.translate.get_history(),
+        module_details=module_details
     )

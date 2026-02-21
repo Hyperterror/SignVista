@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.schemas import HealthResponse
 from app.session_store import get_active_session_count
-from ml.inference import initialize_model, is_model_loaded
+from ml.inference import initialize_model, is_model_loaded, initialize_isl_modules, are_isl_modules_initialized, get_isl_modules_status
 from ml.vocabulary import NUM_CLASSES
 
 from app.database import engine
@@ -32,7 +32,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("signbridge")
+logger = logging.getLogger("signvista")
 
 
 # ─── Lifespan (startup/shutdown) ──────────────────────────────────
@@ -41,7 +41,7 @@ logger = logging.getLogger("signbridge")
 async def lifespan(app: FastAPI):
     """Load ML model on startup, cleanup on shutdown."""
     logger.info("=" * 60)
-    logger.info("🚀 SignBridge Backend starting...")
+    logger.info("🚀 SignVista Backend starting...")
     logger.info(f"   Environment: {settings.ENV}")
     logger.info(f"   CORS origins: {settings.CORS_ORIGINS}")
     logger.info(f"   Model path: {settings.MODEL_PATH}")
@@ -56,7 +56,15 @@ async def lifespan(app: FastAPI):
         logger.info("✅ ML model loaded — real predictions active")
     else:
         logger.warning("⚠️ ML model NOT loaded — mock predictions active")
-        logger.warning("   Ishit: place model.pth in ml/models/weights/")
+    
+    # Load ISL Unified modules
+    logger.info("📦 Initializing ISL Unified modules...")
+    initialize_isl_modules()
+    
+    if are_isl_modules_initialized():
+        logger.info("✅ ISL modules initialized — multi-module support active")
+    else:
+        logger.warning("⚠️ ISL modules NOT initialized — using fallback LSTM only")
 
     yield
 
@@ -67,7 +75,7 @@ async def lifespan(app: FastAPI):
 # ─── FastAPI App ──────────────────────────────────────────────────
 
 app = FastAPI(
-    title="SignBridge API",
+    title="SignVista API",
     description=(
         "Indian Sign Language Recognition System — "
         "Real-time translation, interactive learning with proficiency tracking, "
@@ -84,8 +92,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -97,7 +105,7 @@ app.add_middleware(
 async def health_check():
     """
     Health check endpoint.
-    Returns server status, model state, and active sessions.
+    Returns server status, model state, active sessions, and ISL module status.
     """
     return HealthResponse(
         status="ok",
@@ -105,6 +113,7 @@ async def health_check():
         active_sessions=get_active_session_count(),
         vocabulary_size=NUM_CLASSES,
         version="1.0.0",
+        isl_modules=get_isl_modules_status(),
     )
 
 
@@ -148,8 +157,13 @@ app.include_router(settings_router.router)
 async def root():
     """Root endpoint — redirects to docs."""
     return {
-        "message": "🖐️ SignBridge API — Indian Sign Language Recognition",
+        "message": "🖐️ SignVista API — Indian Sign Language Recognition",
         "docs": "/docs",
         "health": "/health",
         "version": "1.0.0",
     }
+
+# Debug routes (development only)
+if settings.DEBUG:
+    from app.routes import debug
+    app.include_router(debug.router)

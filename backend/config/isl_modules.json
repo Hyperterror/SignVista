@@ -1,0 +1,42 @@
+{
+  "modules": {
+    "detection": {
+      "enabled": true,
+      "priority": 2,
+      "confidence_threshold": 0.6,
+      "model_path": "ISL-Unified-Project/models/detection/gesture_classifier.h5",
+      "preprocessing_params": {
+        "max_num_hands": 2,
+        "model_complexity": 0,
+        "min_detection_confidence": 0.7,
+        "min_tracking_confidence": 0.7
+      }
+    },
+    "recognition": {
+      "enabled": true,
+      "priority": 1,
+      "confidence_threshold": 0.6,
+      "model_path": "ISL-Unified-Project/models/recognition/lstm_word_model.hdf5",
+      "preprocessing_params": {
+        "buffer_size": 45,
+        "feature_count": 258
+      }
+    },
+    "translation": {
+      "enabled": false,
+      "priority": 3,
+      "confidence_threshold": 0.7,
+      "model_path": "ISL-Unified-Project/models/translation/squeezenet_model",
+      "preprocessing_params": {
+        "yolo_confidence": 0.5,
+        "yolo_threshold": 0.3,
+        "yolo_size": 416
+      }
+    }
+  },
+  "prediction_strategy": "priority",
+  "enable_parallel_execution": false,
+  "performance_monitoring": true,
+  "fallback_to_existing_lstm": true,
+  "require_face_detection": false
+}
