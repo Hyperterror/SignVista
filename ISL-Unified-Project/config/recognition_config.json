@@ -1,0 +1,11 @@
+{
+  "model_path": "../models/recognition/lstm_word_model.hdf5",
+  "frame_count": 45,
+  "keypoint_count": 258,
+  "supported_words": ["Hello", "How are you", "thank you"],
+  "confidence_threshold": 0.6,
+  "video_duration_seconds": 5,
+  "fps": 10,
+  "lstm_layers": [64, 128, 256, 64],
+  "dense_layers": [64, 32]
+}
