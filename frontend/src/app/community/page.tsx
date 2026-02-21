@@ -44,11 +44,16 @@ export default function CommunityPage() {
     }, []);
 
     useEffect(() => {
-        if (!isLoading) {
-            gsap.fromTo('.community-card',
-                { scale: 0.95, opacity: 0, y: 20 },
-                { scale: 1, opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out' }
-            );
+        if (!isLoading && posts.length > 0) {
+            const animateCards = () => {
+                if (document.querySelector('.community-card')) {
+                    gsap.fromTo('.community-card',
+                        { scale: 0.95, opacity: 0, y: 20 },
+                        { scale: 1, opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out' }
+                    );
+                }
+            };
+            requestAnimationFrame(animateCards);
         }
     }, [isLoading, posts]);
 

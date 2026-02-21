@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Type, Mic, MicOff, Send, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '../../utils/api';
+import { api, BACKEND_ORIGIN } from '../../utils/api';
 
 interface SignWord {
     word: string;
@@ -158,7 +158,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
                             <div key={i} className="space-y-1 animate-in zoom-in duration-300" style={{ animationDelay: `${i * 0.1}s` }}>
                                 <div className="aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:scale-105">
                                     {sign.found ? (
-                                        <img src={`http://localhost:8001${sign.gif_url}`} alt={sign.word} className="w-full h-full object-cover" />
+                                        <img src={`${BACKEND_ORIGIN}${sign.gif_url}`} alt={sign.word} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center p-2">
                                             No sign for "{sign.word}"

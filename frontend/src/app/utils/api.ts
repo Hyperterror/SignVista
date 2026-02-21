@@ -3,7 +3,17 @@
  * Handles communication with the FastAPI backend.
  */
 
-const API_BASE_URL = 'http://127.0.0.1:8001/api';
+const getBackendOrigin = () => {
+    if (typeof window !== 'undefined') {
+        return `${window.location.hostname}:8001`;
+    }
+    return 'localhost:8001';
+};
+
+const HOST = getBackendOrigin();
+export const BACKEND_ORIGIN = `http://${HOST}`;
+export const WS_ORIGIN = `ws://${HOST}`;
+export const API_BASE_URL = `${BACKEND_ORIGIN}/api`;
 
 class ApiService {
     private sessionId: string;
