@@ -1,21 +1,29 @@
 """
-Test live camera detection with real-time feedback.
-Press 'q' to quit.
+Developer tool: run the recognition pipeline on your webcam with live feedback.
+
+Usage (from backend/):  python -m scripts.live_camera
+Needs a GUI build of OpenCV (pip install opencv-python); the server uses the
+headless build. Press 'q' to quit.
 """
 
-import cv2
 import logging
+import os
 import sys
+
+import cv2
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Setup logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 )
 
-from ml.inference import initialize_isl_modules, predict_from_raw_frame
+from ml.inference import initialize_isl_modules, initialize_model, predict_from_raw_frame  # noqa: E402
 
 print("Initializing ISL modules...")
+initialize_model()
 initialize_isl_modules()
 print("Ready! Press 'q' to quit.\n")
 
@@ -36,8 +44,8 @@ while True:
     
     frame_count += 1
     
-    # Only process every 5th frame for performance
-    if frame_count % 5 == 0:
+    # Process every 2nd frame (the word model needs a steady stream of frames)
+    if frame_count % 2 == 0:
         # Get prediction with module details
         word, confidence, status, _, module_details = predict_from_raw_frame(
             session_id="live-test",
@@ -53,11 +61,11 @@ while True:
                 print(f"   All predictions: {module_details.get('predictions', [])}")
         elif status == "low_confidence":
             if module_details and module_details.get('predictions'):
-                print(f"⚠️  Low confidence predictions:")
+                print("⚠️  Low confidence predictions:")
                 for pred in module_details['predictions']:
                     print(f"   - {pred['word']}: {pred['confidence']:.2f}")
-        elif status == "no_face":
-            print("ℹ️  No face detected")
+        elif status in ("no_face", "no_hands", "no_model"):
+            print(f"ℹ️  {status}")
         
         # Draw on frame
         if word:

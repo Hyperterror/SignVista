@@ -5,6 +5,7 @@ Good enough for a single-process deployment. For multiple workers/instances,
 swap the storage for Redis.
 """
 
+import ipaddress
 import threading
 import time
 from collections import defaultdict, deque
@@ -62,19 +63,40 @@ class RateLimiter:
 limiter = RateLimiter()
 
 
+def _parse_networks(entries):
+    nets = []
+    for entry in entries:
+        try:
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            pass
+    return nets
+
+
+_TRUSTED_NETWORKS = _parse_networks(settings.TRUSTED_PROXIES)
+
+
+def _is_trusted(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in _TRUSTED_NETWORKS)
+
+
 def client_ip(request: Request) -> str:
     """
     Client IP for rate limiting. X-Forwarded-For is honoured only when the
-    direct peer is a trusted proxy; the right-most untrusted hop is used so a
-    client can't spoof its address by sending its own header.
+    direct peer is a trusted proxy (IPs or CIDR ranges in TRUSTED_PROXIES);
+    the right-most untrusted hop is used so a client can't spoof its address.
     """
     peer = request.client.host if request.client else "unknown"
-    if peer not in settings.TRUSTED_PROXIES:
+    if not _is_trusted(peer):
         return peer
     forwarded = request.headers.get("x-forwarded-for", "")
     hops = [h.strip() for h in forwarded.split(",") if h.strip()]
     for hop in reversed(hops):
-        if hop not in settings.TRUSTED_PROXIES:
+        if not _is_trusted(hop):
             return hop
     return peer
 

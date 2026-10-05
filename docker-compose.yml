@@ -1,0 +1,43 @@
+# SignVista full stack.
+#
+#   cp .env.example .env      # then set SECRET_KEY
+#   docker compose up --build
+#
+# Frontend: http://localhost:3000   (proxies /api to the backend)
+# Backend:  http://localhost:8000   (published for WebSocket connections)
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ENV: ${ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (python -c "import secrets; print(secrets.token_hex(32))")}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Secure cookies need HTTPS; browsers allow them on http://localhost
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Trust X-Forwarded-For from the frontend container (Docker bridge networks)
+      TRUSTED_PROXIES: 127.0.0.1,::1,172.16.0.0/12
+    volumes:
+      - backend-data:/data
+      - ./backend/static/assets:/app/backend/static/assets:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000
+        NEXT_PUBLIC_BACKEND_PORT: "8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  backend-data:
