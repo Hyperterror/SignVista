@@ -1,12 +1,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, Globe, Save } from 'lucide-react';
+import { User, Mail, Phone, Globe, Save, Trophy, Lock } from 'lucide-react';
 import { api } from '../utils/api';
 import { toast } from 'sonner';
 
+interface Achievement {
+    id: string;
+    name: string;
+    description: string;
+    unlocked: boolean;
+    unlocked_at: number | null;
+}
+
+interface LevelInfo {
+    level: number;
+    current_xp: number;
+    next_level_xp: number;
+    progress_percent: number;
+}
+
 export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true);
+    const [achievements, setAchievements] = useState<Achievement[]>([]);
+    const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -23,7 +40,13 @@ export default function ProfilePage() {
     const loadProfile = async () => {
         setIsLoading(true);
         try {
-            const res = await api.getMe();
+            const [res, ach, dash] = await Promise.all([
+                api.getMe(true),
+                api.getAchievements().catch(() => null),
+                api.getDashboard().catch(() => null),
+            ]);
+            if (ach) setAchievements(ach.achievements);
+            if (dash) setLevelInfo(dash.xp_info);
             setFormData({
                 name: res.name || '',
                 email: res.email || '',
@@ -41,7 +64,7 @@ export default function ProfilePage() {
         e.preventDefault();
         setIsSaving(true);
         try {
-            await api.updateProfile(formData.name, formData.email, formData.phone);
+            await api.updateProfile(formData.name, formData.email, formData.phone, formData.preferred_language);
             toast.success("Profile updated successfully!");
         } catch (e: any) {
             toast.error(e.message || "Failed to update profile");
@@ -75,7 +98,14 @@ export default function ProfilePage() {
                         </div>
                         <div>
                             <h2 className="text-2xl font-bold">{formData.name}</h2>
-                            <p className="text-gray-500">SignVista Learner</p>
+                            <p className="text-gray-500">
+                                {levelInfo ? `Level ${levelInfo.level} Signer · ${levelInfo.current_xp} XP` : 'SignVista Learner'}
+                            </p>
+                            {levelInfo && (
+                                <div className="mt-2 w-48 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-[#105F68]" style={{ width: `${Math.min(100, levelInfo.progress_percent)}%` }} />
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -149,6 +179,36 @@ export default function ProfilePage() {
                             </button>
                         </div>
                     </form>
+                </div>
+
+                <div className="mt-10 bg-white dark:bg-gray-900 rounded-[40px] shadow-2xl border border-gray-100 dark:border-gray-800 p-8 md:p-12">
+                    <h2 className="text-2xl font-bold flex items-center gap-3 mb-2">
+                        <Trophy className="w-6 h-6 text-[#105F68]" /> Achievements
+                    </h2>
+                    <p className="text-gray-500 mb-8">
+                        {achievements.filter((a) => a.unlocked).length} of {achievements.length} unlocked
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        {achievements.map((a) => (
+                            <div
+                                key={a.id}
+                                className={`p-5 rounded-2xl border ${a.unlocked
+                                    ? 'border-[#105F68]/30 bg-[#105F68]/5'
+                                    : 'border-gray-100 dark:border-gray-800 opacity-60'}`}
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="font-bold">{a.name}</span>
+                                    {!a.unlocked && <Lock className="w-4 h-4 text-gray-400" />}
+                                </div>
+                                <p className="text-sm text-gray-500 mt-1">{a.description}</p>
+                                {a.unlocked && a.unlocked_at && (
+                                    <p className="text-xs text-[#105F68] mt-2">
+                                        Unlocked {new Date(a.unlocked_at * 1000).toLocaleDateString()}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>

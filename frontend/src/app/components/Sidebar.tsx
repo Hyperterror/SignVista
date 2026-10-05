@@ -47,31 +47,51 @@ export function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    api.getNotifications()
+      .then((res) => { if (!cancelled) setUnreadCount(res.unread_count ?? 0); })
+      .catch(() => { });
     const fetchUser = async () => {
       try {
-        const profile = await api.getMe();
-        setUserData(profile);
-      } catch (error) {
-        console.error("Failed to fetch user in sidebar:", error);
+        const [me, dashboard] = await Promise.all([
+          api.getMe(),
+          api.getDashboard().catch(() => null),
+        ]);
+        if (!cancelled) setUserData({ ...me, level: dashboard?.xp_info?.level });
+      } catch {
+        // 401 is handled by the API client (redirect to sign-in)
       }
     };
     fetchUser();
+    return () => { cancelled = true; };
   }, [pathname]);
 
+  // Respect the user's notification setting (and update live when it changes)
+  useEffect(() => {
+    api.getSettings().then((s) => setNotificationsEnabled(s.notifications_enabled)).catch(() => { });
+    const onSettings = (e: Event) => setNotificationsEnabled((e as CustomEvent).detail?.notifications_enabled ?? true);
+    window.addEventListener('signvista:settings', onSettings);
+    return () => window.removeEventListener('signvista:settings', onSettings);
+  }, []);
+
   const navItems = [
-    { path: '/', icon: Home, label: 'Home', gesture: '🏠' },
+    { path: '/dashboard', icon: Home, label: 'Dashboard', gesture: '🏠' },
     { path: '/profile', icon: User, label: 'Profile', gesture: '👤' },
     { path: '/game', icon: Trophy, label: 'ISL Quiz Game', gesture: '🎮' },
     { path: '/learning', icon: BookOpen, label: 'Learning Hub', gesture: '📚' },
     { path: '/dictionary', icon: Search, label: 'ISL Dictionary', gesture: '🔎' },
     { path: '/community', icon: Users, label: 'Community', gesture: '🤝' },
     { path: '/translate', icon: Camera, label: 'AR Translate', gesture: '📸' },
+    { path: '/text', icon: Type, label: 'Text to Sign', gesture: '⌨️' },
+    { path: '/voice', icon: Mic, label: 'Voice to Sign', gesture: '🎙️' },
     { path: '/chat', icon: MessageSquare, label: 'Messages', gesture: '💬' },
   ];
 
@@ -185,7 +205,9 @@ export function Sidebar() {
               >
                 <div className="relative">
                   <Bell className="w-5 h-5 transition-transform hover:scale-110" />
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
+                  {notificationsEnabled && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" aria-label={`${unreadCount} unread notifications`} />
+                  )}
                 </div>
               </button>
               <button
@@ -204,23 +226,26 @@ export function Sidebar() {
               <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-3xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden hover:border-[#105F68]/30 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 flex-shrink-0 rounded-full bg-[#105F68] flex items-center justify-center text-white font-bold shadow-inner">
-                    {userData?.name?.substring(0, 2).toUpperCase() || 'UK'}
+                    {userData?.name?.substring(0, 2).toUpperCase() || '··'}
                   </div>
                   <motion.div
                     animate={{ opacity: (isHovered || isMobileOpen) ? 1 : 0, x: (isHovered || isMobileOpen) ? 0 : -10 }}
                     className="flex-1 min-w-0"
                   >
-                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-[#105F68] transition-colors">{userData?.name || 'Ujjwal Kumar'}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-[#105F68] transition-colors">{userData?.name || 'Loading…'}</p>
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                      {userData?.level ? `Level ${userData.level} Signer` : 'Level 5 Signer'}
+                      {userData?.level ? `Level ${userData.level} Signer` : 'SignVista Learner'}
                     </p>
                   </motion.div>
                   {(isHovered || isMobileOpen) && (
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
-                        await api.logout();
-                        window.location.href = '/auth';
+                        try {
+                          await api.logout();
+                        } finally {
+                          window.location.href = '/auth';
+                        }
                       }}
                       className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors rounded-xl flex-shrink-0"
                       title="Logout"
@@ -243,6 +268,7 @@ export function Sidebar() {
       <NotificationsDropdown
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
+        onUnreadChange={setUnreadCount}
       />
 
       {isMobileOpen && (
