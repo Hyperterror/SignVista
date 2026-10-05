@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
-import { Progress } from '../components/ui/progress';
+import { Progress } from '../components/Progress';
 
 interface DashboardData {
     user_name: string;
