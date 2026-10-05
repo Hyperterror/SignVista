@@ -1,5 +1,5 @@
 import time
-from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, Text, JSON
+from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -10,13 +10,15 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False, index=True)
     phone = Column(String(20), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     preferred_language = Column(String(10), default="en")
     subscription_tier = Column(String(20), default="free")  # 'free', 'pro', 'welfare'
     daily_translation_seconds_used = Column(Integer, default=0)
     created_at = Column(Float, default=time.time)
+    # Incremented on logout / password change to revoke all previously issued tokens
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
 
     stats = relationship("UserStats", back_populates="user", uselist=False, cascade="all, delete-orphan")
     settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -37,6 +39,9 @@ class UserStats(Base):
     best_score = Column(Integer, default=0)         # Renamed alias for best_game_score
     best_game_score = Column(Integer, default=0)    # Keep original for backward compat
     unlocked_achievements = Column(JSON, default=list)  # List of string IDs
+    current_streak = Column(Integer, default=0, server_default="0")
+    longest_streak = Column(Integer, default=0, server_default="0")
+    last_active_date = Column(String(10), nullable=True)  # YYYY-MM-DD (UTC)
 
     user = relationship("User", back_populates="stats")
 
@@ -134,6 +139,7 @@ class CommunityPostBase(Base):
     __tablename__ = "community_posts"
 
     id = Column(String(50), primary_key=True, index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), nullable=True, index=True)
     user_name = Column(String(100), nullable=False)
     avatar_initials = Column(String(10), nullable=False)
     content = Column(Text, nullable=False)
@@ -150,6 +156,30 @@ class CommunityCommentBase(Base):
 
     id = Column(String(50), primary_key=True, index=True)
     post_id = Column(String(50), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), nullable=True, index=True)
     user_name = Column(String(100), nullable=False)
     content = Column(Text, nullable=False)
     timestamp = Column(Float, default=time.time)
+
+
+class PostLike(Base):
+    """One like per user per post."""
+    __tablename__ = "community_post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_like"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(String(50), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(String(50), ForeignKey("users.user_id"), index=True, nullable=False)
+    timestamp = Column(Float, default=time.time)
+
+
+class ActivityLog(Base):
+    """Persistent user activity timeline (learn attempts, games, achievements, level-ups)."""
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), index=True, nullable=False)
+    type = Column(String(50), nullable=False)
+    data = Column(JSON, default=dict)
+    xp_earned = Column(Integer, default=0, server_default="0")
+    timestamp = Column(Float, default=time.time, index=True)
