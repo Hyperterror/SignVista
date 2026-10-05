@@ -8,9 +8,11 @@ Ayush: Send a base64 JPEG frame every 200ms.
        Response includes word, confidence, buffer status, and history.
 """
 
+import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 
 from app.schemas import RecognizeFrameRequest, RecognizeFrameResponse
 from app.session_store import get_session
@@ -22,8 +24,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Translate"])
 
 
+
 @router.post("/recognize-frame", response_model=RecognizeFrameResponse)
-async def recognize_frame(
+def recognize_frame(
     request: RecognizeFrameRequest,
     return_module_details: bool = False
 ):
@@ -95,3 +98,68 @@ async def recognize_frame(
         history=session.translate.get_history(),
         module_details=module_details
     )
+
+@router.websocket("/ws/recognize")
+async def websocket_recognize(websocket: WebSocket, session_id: str):
+    """
+    Real-time persistent connection for streaming frames without HTTP overhead.
+    """
+    await websocket.accept()
+    session = get_session(session_id)
+    
+    try:
+        while True:
+            # Client sends the base64 payload as text
+            data = await websocket.receive_text()
+            
+            try:
+                # We expect the client to send a raw base64 string or JSON with a frame prop
+                try:
+                    payload = json.loads(data)
+                    frame_data = payload.get("frame", "")
+                    req_module_details = payload.get("module_details", False)
+                except json.JSONDecodeError:
+                    frame_data = data
+                    req_module_details = False
+                    
+                frame = decode_base64_frame(frame_data)
+            except FrameDecodeError as e:
+                await websocket.send_json({"error": str(e)})
+                continue
+
+            if not validate_frame(frame):
+                await websocket.send_json({"error": "Invalid frame"})
+                continue
+
+            frame = resize_frame(frame, target_width=640)
+
+            # Avoid blocking the WebSocket async event loop with heavy ML inference
+            word, confidence, buffer_status, _, module_details = await run_in_threadpool(
+                predict_from_raw_frame,
+                session_id=session_id,
+                frame=frame,
+                return_module_details=req_module_details
+            )
+
+            if word is not None:
+                session.translate.add_prediction(word, confidence)
+
+            resp = {
+                "word": word,
+                "confidence": round(confidence, 3),
+                "buffer_status": buffer_status,
+                "history": session.translate.get_history()
+            }
+            if req_module_details and module_details is not None:
+                resp.update(module_details)
+
+            await websocket.send_json(resp)
+            
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        try:
+            await websocket.close()
+        except:
+            pass

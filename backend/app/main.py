@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.config import settings as app_settings
 from app.schemas import HealthResponse
 from app.session_store import get_active_session_count
 from ml.inference import initialize_model, is_model_loaded, initialize_isl_modules, are_isl_modules_initialized, get_isl_modules_status
@@ -22,13 +22,8 @@ from ml.vocabulary import NUM_CLASSES
 from app.database import engine
 from app import models
 
-# Ensure all database tables are created.
-models.Base.metadata.create_all(bind=engine)
-
-# ─── Logging Setup ────────────────────────────────────────────────
-
 logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    level=logging.DEBUG if app_settings.DEBUG else logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%H:%M:%S",
 )
@@ -42,12 +37,16 @@ async def lifespan(app: FastAPI):
     """Load ML model on startup, cleanup on shutdown."""
     logger.info("=" * 60)
     logger.info("🚀 SignVista Backend starting...")
-    logger.info(f"   Environment: {settings.ENV}")
-    logger.info(f"   CORS origins: {settings.CORS_ORIGINS}")
-    logger.info(f"   Model path: {settings.MODEL_PATH}")
-    logger.info(f"   Confidence threshold: {settings.CONFIDENCE_THRESHOLD}")
-    logger.info(f"   Buffer size: {settings.BUFFER_SIZE} frames")
+    logger.info(f"   Environment: {app_settings.ENV}")
+    logger.info(f"   CORS origins: {app_settings.CORS_ORIGINS}")
+    logger.info(f"   Model path: {app_settings.MODEL_PATH}")
+    logger.info(f"   Confidence threshold: {app_settings.CONFIDENCE_THRESHOLD}")
+    logger.info(f"   Buffer size: {app_settings.BUFFER_SIZE} frames")
     logger.info("=" * 60)
+
+    # Ensure all database tables are created.
+    logger.info("📦 Ensuring database tables exist...")
+    models.Base.metadata.create_all(bind=engine)
 
     # Load ML model
     initialize_model()
@@ -92,7 +91,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=app_settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -164,6 +163,6 @@ async def root():
     }
 
 # Debug routes (development only)
-if settings.DEBUG:
+if app_settings.DEBUG:
     from app.routes import debug
     app.include_router(debug.router)

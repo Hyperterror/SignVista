@@ -24,6 +24,9 @@ async def get_dashboard(session_id: str, current_user: dict = Depends(get_curren
     """
     Get aggregated dashboard summary.
     """
+    if current_user["user_id"] != session_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
     session = get_session(session_id)
     
     # Calculate XP Bar
@@ -74,7 +77,7 @@ async def get_dashboard(session_id: str, current_user: dict = Depends(get_curren
 
     return DashboardResponse(
         sessionId=session_id,
-        user_name="User", # Ideally fetch from profile if available
+        user_name=current_user.get("name", "User") if current_user else "User",
         xp_info=xp_info,
         overall_proficiency=session.learn.get_overall_proficiency(),
         words_practiced=len(practiced),

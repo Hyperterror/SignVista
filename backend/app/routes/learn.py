@@ -10,10 +10,11 @@ Ayush: User selects a word from vocabulary, records their sign,
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas import LearnAttemptRequest, LearnAttemptResponse
 from app.session_store import get_session
+from app.dependencies import get_current_user
 from app.utils.frame_utils import decode_base64_frame, validate_frame, resize_frame, FrameDecodeError
 from ml.inference import predict_from_raw_frame
 from ml.vocabulary import is_valid_word
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/api/learn", tags=["Learn"])
 
 
 @router.post("/attempt", response_model=LearnAttemptResponse)
-async def learn_attempt(request: LearnAttemptRequest):
+def learn_attempt(request: LearnAttemptRequest, current_user: dict = Depends(get_current_user)):
     """
     Submit a practice attempt for a specific word.
 
@@ -47,6 +48,10 @@ async def learn_attempt(request: LearnAttemptRequest):
     # Validate session ID
     if not request.sessionId or not request.sessionId.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
+
+    # Authorization: ensure the session belongs to the authenticated user
+    if current_user["user_id"] != request.sessionId:
+        raise HTTPException(status_code=403, detail="Unauthorized")
 
     # Validate target word
     if not is_valid_word(request.targetWord):

@@ -25,9 +25,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Profile"])
 
 
-# ─── In-Memory Profile Store ─────────────────────────────────────
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app import models
 
-_profiles: Dict[str, Dict] = {}
+# ─── In-Memory Profile Store Removed ─────────────────────────────
+# Profiles are now backed entirely by SQLite via models.User
 
 
 # ─── Welcome Messages ────────────────────────────────────────────
@@ -41,7 +44,7 @@ WELCOME_SIGN_WORDS = ["hello", "good", "friend"]  # Words shown as sign greeting
 
 
 @router.post("/profile", response_model=ProfileResponse)
-async def create_profile(request: ProfileCreateRequest, current_user: dict = Depends(get_current_user)):
+async def create_profile(request: ProfileCreateRequest, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Create or update a user profile after onboarding form.
 
@@ -59,6 +62,10 @@ async def create_profile(request: ProfileCreateRequest, current_user: dict = Dep
     if not request.sessionId or not request.sessionId.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
 
+    # Authorize
+    if current_user["user_id"] != request.sessionId:
+        raise HTTPException(status_code=403, detail="Unauthorized profile update")
+
     if not request.name or not request.name.strip():
         raise HTTPException(status_code=400, detail="Name is required")
 
@@ -69,23 +76,25 @@ async def create_profile(request: ProfileCreateRequest, current_user: dict = Dep
     if lang not in ("en", "hi"):
         lang = "en"
 
-    # Store profile
-    profile = {
-        "sessionId": request.sessionId,
-        "name": request.name.strip(),
-        "email": request.email.strip().lower(),
-        "phone": request.phone.strip() if request.phone else "",
-        "preferred_language": lang,
-        "created_at": time.time(),
-    }
-    _profiles[request.sessionId] = profile
+    # Store profile in DB
+    user_obj = db.query(models.User).filter(models.User.user_id == request.sessionId).first()
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="User not found in DB")
+        
+    user_obj.name = request.name.strip()
+    user_obj.email = request.email.strip().lower()
+    if request.phone:
+        user_obj.phone = request.phone.strip()
+    user_obj.preferred_language = lang
+    
+    db.commit()
 
-    # Ensure session exists
+    # Ensure memory session exists (for backward comp usage in games)
     get_session(request.sessionId)
 
     # Build welcome response
     welcome_msg = WELCOME_MESSAGES.get(lang, WELCOME_MESSAGES["en"]).format(
-        name=profile["name"]
+        name=user_obj.name
     )
 
     # Get sign data for welcome words
@@ -102,19 +111,19 @@ async def create_profile(request: ProfileCreateRequest, current_user: dict = Dep
             })
 
     return ProfileResponse(
-        sessionId=profile["sessionId"],
-        name=profile["name"],
-        email=profile["email"],
-        phone=profile["phone"],
-        preferred_language=profile["preferred_language"],
+        sessionId=user_obj.user_id,
+        name=user_obj.name,
+        email=user_obj.email,
+        phone=user_obj.phone,
+        preferred_language=user_obj.preferred_language,
         welcome_message=welcome_msg,
         welcome_sign_data=welcome_signs,
-        created_at=profile["created_at"],
+        created_at=user_obj.created_at,
     )
 
 
 @router.get("/profile/{session_id}", response_model=ProfileResponse)
-async def get_profile(session_id: str, current_user: dict = Depends(get_current_user)):
+async def get_profile(session_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get user profile and welcome data.
 
@@ -123,27 +132,16 @@ async def get_profile(session_id: str, current_user: dict = Depends(get_current_
     if not session_id or not session_id.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
 
-    profile = _profiles.get(session_id)
-    if profile is None:
-        # Fallback: Check if this session belongs to the current authenticated user
-        if current_user["user_id"] == session_id:
-            logger.info(f"Dynamically generating profile for session {session_id}")
-            profile = {
-                "sessionId": current_user["user_id"],
-                "name": current_user["name"],
-                "email": current_user["email"],
-                "phone": current_user["phone"],
-                "preferred_language": current_user.get("preferred_language", "en"),
-                "created_at": current_user.get("created_at", time.time()),
-            }
-            # Cache it to prevent redundant lookups
-            _profiles[session_id] = profile
-        else:
-            raise HTTPException(status_code=404, detail="Profile not found. Create one with POST /api/profile first.")
+    if session_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    user_obj = db.query(models.User).filter(models.User.user_id == session_id).first()
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="Profile not found in DB")
 
-    lang = profile["preferred_language"]
+    lang = user_obj.preferred_language
     welcome_msg = WELCOME_MESSAGES.get(lang, WELCOME_MESSAGES["en"]).format(
-        name=profile["name"]
+        name=user_obj.name
     )
 
     welcome_signs = []
@@ -159,12 +157,12 @@ async def get_profile(session_id: str, current_user: dict = Depends(get_current_
             })
 
     return ProfileResponse(
-        sessionId=profile["sessionId"],
-        name=profile["name"],
-        email=profile["email"],
-        phone=profile["phone"],
-        preferred_language=profile["preferred_language"],
+        sessionId=user_obj.user_id,
+        name=user_obj.name,
+        email=user_obj.email,
+        phone=user_obj.phone,
+        preferred_language=user_obj.preferred_language,
         welcome_message=welcome_msg,
         welcome_sign_data=welcome_signs,
-        created_at=profile["created_at"],
+        created_at=user_obj.created_at,
     )

@@ -1,11 +1,12 @@
 """
 SignVista Session Store
 
-In-memory session management for translate, learn, and game modes.
-All state is keyed by sessionId and lives in Python dicts.
+Hybrid in-memory + SQLite session management.
+- In-memory: Fast lookup for translate / learn / game loop state.
+- SQLite: Persistent storage for XP, level, game history, and learning precision.
 
-NOTE: All data is lost on server restart. This is by design for the hackathon.
-For production, replace with Redis or a database.
+On first access, user sessions are pre-loaded from the DB so state
+survives server restarts.
 """
 
 import time
@@ -18,39 +19,24 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ml.vocabulary import WORD_LIST, WORD_DISPLAY, is_valid_word
 from app.config import settings
-from passlib.context import CryptContext
+import bcrypt
+from app.database import SessionLocal
+from app.models import User, UserStats, UserSettings, LearningPrecision, GameSessionHistory
 
 # ─── Auth Setup ──────────────────────────────────────────────────
-pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-# Persistent global users (in-memory mock database)
-USERS: Dict[str, Dict[str, Any]] = {}
-USERS_DB_PATH = "users_db.json"
-
-def save_users():
     try:
-        with open(USERS_DB_PATH, "w") as f:
-            json.dump(USERS, f, indent=4)
-    except Exception as e:
-        print(f"Error saving users: {e}")
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
-def load_users():
-    global USERS
-    if os.path.exists(USERS_DB_PATH):
-        try:
-            with open(USERS_DB_PATH, "r") as f:
-                USERS = json.load(f)
-        except Exception as e:
-            print(f"Error loading users: {e}")
-
-# Initial load
-load_users()
+# ─── Auth Setup Removed In-Memory Dict ───────────────────────────
+# Legacy USERS mock DB and json caching removed in favor of SQLite.
 
 
 # ─── Constants ───────────────────────────────────────────────────
@@ -137,13 +123,16 @@ class LearnSession:
         
         # Check for achievements
         user_session.check_achievements("learn", {"word": word_key, "is_correct": is_correct})
-        
+
         # Add activity
         user_session.add_activity("learn_attempt", {
             "word": word_key,
             "correct": is_correct,
             "proficiency": stats["proficiency"]
         })
+
+        # Persist learning precision to SQLite
+        self._persist_learning(user_session.session_id, word_key)
 
         return {
             "correct": is_correct,
@@ -152,6 +141,39 @@ class LearnSession:
             "correct_count": stats["correct"],
             "fault": fault,
         }
+
+    def _persist_learning(self, user_session_id: str, word_key: str):
+        """Upsert LearningPrecision row for this word in SQLite."""
+        stats = self.word_stats[word_key]
+        db = SessionLocal()
+        try:
+            row = db.query(LearningPrecision).filter(
+                LearningPrecision.user_id == user_session_id,
+                LearningPrecision.word == word_key,
+            ).first()
+            if row:
+                row.attempts = stats["attempts"]
+                row.correct_count = stats["correct"]
+                row.proficiency = stats["proficiency"]
+                row.best_confidence = stats["best_confidence"]
+                row.last_attempt_time = stats["last_attempt_time"]
+            else:
+                row = LearningPrecision(
+                    user_id=user_session_id,
+                    word=word_key,
+                    attempts=stats["attempts"],
+                    correct_count=stats["correct"],
+                    proficiency=stats["proficiency"],
+                    best_confidence=stats["best_confidence"],
+                    last_attempt_time=stats["last_attempt_time"],
+                )
+                db.add(row)
+            db.commit()
+        except Exception:
+            pass  # Never crash a learn attempt over a DB write
+        finally:
+            db.close()
+
 
     def _generate_fault(self, is_correct: bool, confidence: float, stats: Dict) -> str:
         """Generate feedback message based on attempt result."""
@@ -350,23 +372,47 @@ class UserSession:
 
         if game.score > self.best_game_score:
             self.best_game_score = game.score
-        
+
         # Award Game XP
         game_xp = int(game.score / 10) + 50  # Base 50 + 10% of score
         self.award_xp(game_xp, f"Completed game {game_id}")
-        
+
         # Check game achievements
         self.check_achievements("game", {"game": game})
-        
+
+        accuracy = round((game.words_completed / max(game.total_attempts, 1)) * 100, 1)
         self.add_activity("game_completed", {
             "gameId": game_id,
             "score": game.score,
-            "accuracy": round((game.words_completed / max(game.total_attempts, 1)) * 100, 1)
+            "accuracy": accuracy,
         })
+
+        # Persist game result to SQLite
+        db = SessionLocal()
+        try:
+            history_row = GameSessionHistory(
+                user_id=self.session_id,
+                game_id=game_id,
+                score=game.score,
+                words_completed=game.words_completed,
+                total_attempts=game.total_attempts,
+                accuracy=accuracy,
+                best_streak=game.best_streak,
+                duration=game.duration,
+                played_at=game.start_time,
+            )
+            db.add(history_row)
+            db.commit()
+        except Exception:
+            pass  # Never crash the game flow over a DB write
+        finally:
+            db.close()
 
     def award_xp(self, amount: int, reason: str):
         self.total_xp += amount
         self._check_level_up()
+        # Persist XP and level to SQLite in the background
+        self._persist_xp()
 
     def _check_level_up(self):
         new_level = 1
@@ -375,12 +421,28 @@ class UserSession:
                 new_level = i + 1
             else:
                 break
-        
+
         if new_level > self.level:
             old_level = self.level
             self.level = new_level
             self.add_activity("level_up", {"old": old_level, "new": new_level})
             self.check_achievements("level", {"level": new_level})
+
+    def _persist_xp(self):
+        """Write current XP and level to the UserStats table."""
+        db = SessionLocal()
+        try:
+            stats_row = db.query(UserStats).filter(UserStats.user_id == self.session_id).first()
+            if stats_row:
+                stats_row.total_xp = self.total_xp
+                stats_row.level = self.level
+                stats_row.games_played = self.games_played
+                stats_row.best_score = self.best_game_score
+                db.commit()
+        except Exception:
+            pass  # Never crash the game loop over a DB write
+        finally:
+            db.close()
 
     def add_activity(self, type: str, data: Dict):
         self.activity_history.append({
@@ -458,9 +520,35 @@ _sessions: Dict[str, UserSession] = {}
 
 
 def get_session(session_id: str) -> UserSession:
-    """Get or create a session. Auto-creates on first access."""
+    """Get or create a session. Pre-loads persistent state from DB on first access."""
     if session_id not in _sessions:
-        _sessions[session_id] = UserSession(session_id)
+        session = UserSession(session_id)
+        # Pre-load XP, level, and game stats from SQLite so they survive restarts
+        db = SessionLocal()
+        try:
+            stats_row = db.query(UserStats).filter(UserStats.user_id == session_id).first()
+            if stats_row:
+                session.total_xp = stats_row.total_xp or 0
+                session.level = stats_row.level or 1
+                session.games_played = stats_row.games_played or 0
+                session.best_game_score = stats_row.best_score or 0
+            # Pre-load per-word learning precision from SQLite
+            precision_rows = db.query(LearningPrecision).filter(
+                LearningPrecision.user_id == session_id
+            ).all()
+            for row in precision_rows:
+                session.learn.word_stats[row.word] = {
+                    "attempts": row.attempts or 0,
+                    "correct": row.correct_count or 0,
+                    "proficiency": row.proficiency or 0.0,
+                    "best_confidence": row.best_confidence or 0.0,
+                    "last_attempt_time": row.last_attempt_time,
+                }
+        except Exception:
+            pass  # Warm cache failure is non-fatal; session starts fresh
+        finally:
+            db.close()
+        _sessions[session_id] = session
     return _sessions[session_id]
 
 
@@ -488,98 +576,80 @@ def clear_all_sessions():
 
 # In a real app, this would be a database. 
 # For the hackathon, we use global lists.
-COMMUNITY_POSTS = [
-    {
-        "id": "official_1",
-        "user_name": "SignVista Team",
-        "avatar_initials": "SV",
-        "content": "New update: Added 50+ medical signs to the dictionary. Stay informed, stay safe! 🏥",
-        "likes": 156,
-        "comments": [],
-        "timestamp": time.time() - 86400,
-        "is_official": True,
-        "achievement_text": None,
-        "tags": ["#Update", "#MedicalISL"]
-    },
-    {
-        "id": "post_1",
-        "user_name": "Ishaan Sharma",
-        "avatar_initials": "IS",
-        "content": "Just mastered the 'Welcome' sign in ISL! The AI feedback was super helpful in correcting my hand orientation. 🤟",
-        "likes": 24,
-        "comments": [],
-        "timestamp": time.time() - 7200,
-        "is_official": False,
-        "achievement_text": "Mastered: Welcome",
-        "tags": ["#Achievement", "#Learning"]
-    }
-]
-
-def get_community_feed() -> List[Dict]:
-    # Return posts sorted by timestamp desc
-    return sorted(COMMUNITY_POSTS, key=lambda x: x["timestamp"], reverse=True)
-
-def add_community_post(post_data: Dict):
-    COMMUNITY_POSTS.append(post_data)
-
-def toggle_like(post_id: str, session_id: str):
-    for post in COMMUNITY_POSTS:
-        if post["id"] == post_id:
-            # Simple simulation: just increment likes
-            post["likes"] += 1
-            return post
-    return None
-
 def get_active_users() -> List[Dict]:
+    """Get the list of currently active users natively from SQLite."""
     active = []
-    # Mix of real sessions + some mock users for visual appeal
-    for sid, sess in _sessions.items():
-        name = "User"
-        active.append({"name": f"Signer_{sid[:4]}", "initials": sid[:2].upper(), "is_online": True})
-    
-    # Add mock users if list is small
-    if len(active) < 3:
-        active.append({"name": "Priya Patel", "initials": "PP", "is_online": True})
-        active.append({"name": "Rahul K.", "initials": "RK", "is_online": True})
-    
+    if not _sessions:
+        return active
+        
+    db = SessionLocal()
+    try:
+        active_ids = list(_sessions.keys())
+        users = db.query(User).filter(User.user_id.in_(active_ids)).all()
+        for u in users:
+            active.append({
+                "name": u.name,
+                "initials": u.name[:2].upper(),
+                "is_online": True
+            })
+    except Exception:
+        pass
+    finally:
+        db.close()
+        
     return active
 
 def register_user(data: Dict[str, Any]) -> Tuple[bool, str, Optional[UserSession]]:
     """Register a new user and create a session."""
-    phone = data["phone"]
-    if phone in USERS:
-        return False, "Phone number already registered", None
+    db = SessionLocal()
+    try:
+        phone = data["phone"]
+        existing_user = db.query(User).filter(User.phone == phone).first()
+        if existing_user:
+            return False, "Phone number already registered", None
+            
+        hashed_pwd = hash_password(data["password"])
+        user_id = str(uuid.uuid4())[:8]
         
-    hashed_pwd = hash_password(data["password"])
-    user_id = str(uuid.uuid4())[:8]
-    
-    user_entry = {
-        "user_id": user_id,
-        "name": data["name"],
-        "email": data["email"],
-        "phone": phone,
-        "password": hashed_pwd,
-        "preferred_language": data.get("preferred_language", "en"),
-        "created_at": time.time()
-    }
-    
-    USERS[phone] = user_entry
-    save_users()
-    
-    # Create a session tied to this user
-    session = get_session(user_id)
-    # We can store extra info in the session object if needed
-    
-    return True, "Success", session
+        new_user = User(
+            user_id=user_id,
+            name=data["name"],
+            email=data["email"],
+            phone=phone,
+            password_hash=hashed_pwd,
+            preferred_language=data.get("preferred_language", "en"),
+            created_at=time.time()
+        )
+        db.add(new_user)
+        
+        # Initialize relational records automatically
+        stats = UserStats(user_id=user_id)
+        settings = UserSettings(user_id=user_id)
+        db.add(stats)
+        db.add(settings)
+        
+        db.commit()
+        
+        session = get_session(user_id)
+        return True, "Success", session
+    except Exception as e:
+        db.rollback()
+        return False, f"Server Error: {str(e)}", None
+    finally:
+        db.close()
 
 def login_user(phone: str, password: str) -> Tuple[bool, str, Optional[UserSession]]:
     """Authenticate user and return session."""
-    user = USERS.get(phone)
-    if not user:
-        return False, "User not found", None
-        
-    if not verify_password(password, user["password"]):
-        return False, "Invalid password", None
-        
-    session = get_session(user["user_id"])
-    return True, "Login successful", session
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.phone == phone).first()
+        if not user:
+            return False, "User not found", None
+            
+        if not verify_password(password, user.password_hash):
+            return False, "Invalid password", None
+            
+        session = get_session(user.user_id)
+        return True, "Login successful", session
+    finally:
+        db.close()

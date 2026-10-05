@@ -6,11 +6,12 @@ GET /api/history/{sessionId}
 Ayush: Use this for the activity timeline.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List
 
 from app.schemas import HistoryResponse, ActivityEvent
 from app.session_store import get_session
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/history", tags=["History"])
 
@@ -55,31 +56,35 @@ def format_activity_desc(activity_type: str, data: dict) -> str:
 @router.get("/{session_id}", response_model=HistoryResponse)
 async def get_history(
     session_id: str,
+    current_user: dict = Depends(get_current_user),
     limit: int = Query(20, ge=1, le=100),
-    type: Optional[str] = None
+    type: Optional[str] = None,
 ):
     """
     Get session activity history with formatting for display.
     """
+    if current_user["user_id"] != session_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
     session = get_session(session_id)
     raw_history = session.activity_history[::-1]  # Newest first
-    
+
     events = []
     for h in raw_history:
         if type and h["type"] != type:
             continue
-            
+
         events.append(ActivityEvent(
             type=h["type"],
             timestamp=h["timestamp"],
             title=format_activity_title(h["type"], h["data"]),
             description=format_activity_desc(h["type"], h["data"]),
-            xp_earned=0 # XP award info isn't stored per-activity yet, but could be added
+            xp_earned=0,  # XP award info isn't stored per-activity yet
         ))
-        
+
         if len(events) >= limit:
             break
-            
+
     return HistoryResponse(
         sessionId=session_id,
         activities=events

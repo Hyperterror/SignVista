@@ -6,13 +6,24 @@
 const getHost = () => {
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
-        return hostname === 'localhost' ? '127.0.0.1:8001' : `${hostname}:8001`;
+        return hostname === 'localhost' ? '127.0.0.1:8000' : `${hostname}:8000`;
     }
-    return '127.0.0.1:8001';
+    return '127.0.0.1:8000';
 };
 
-export const getBackendOrigin = () => `http://${getHost()}`;
-export const getWsOrigin = () => `ws://${getHost()}`;
+export const getBackendOrigin = () => {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+    }
+    return `http://${getHost()}`;
+};
+
+export const getWsOrigin = () => {
+    if (process.env.NEXT_PUBLIC_WS_URL) {
+        return process.env.NEXT_PUBLIC_WS_URL;
+    }
+    return `ws://${getHost()}`;
+};
 export const getApiBaseUrl = () => `${getBackendOrigin()}/api`;
 
 // For backward compatibility keep the constants but make them use the getters
@@ -30,7 +41,12 @@ class ApiService {
 
         // Only access localStorage in the browser
         if (typeof window !== 'undefined') {
-            this.token = localStorage.getItem('signvista_access_token');
+            // Token is now managed securely via HttpOnly cookies
+            // but we keep it in memory for Authorization headers (backward compatibility)
+            // or we could just rely solely on cookies. For this fix, we rely on cookies.
+            this.token = null;
+            localStorage.removeItem('signvista_access_token'); // Clear legacy tokens
+
             const storedSession = localStorage.getItem('signvista_session_id');
 
             if (storedSession) {
@@ -75,7 +91,10 @@ class ApiService {
             headers['Authorization'] = `Bearer ${this.token}`;
         }
 
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers });
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            headers,
+            credentials: 'include'
+        });
         return this.handleResponse(response, endpoint);
     }
 
@@ -88,6 +107,7 @@ class ApiService {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
             headers,
+            credentials: 'include',
             body: JSON.stringify(data)
         });
         return this.handleResponse(response, endpoint);
@@ -102,12 +122,16 @@ class ApiService {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'PUT',
             headers,
+            credentials: 'include',
             body: JSON.stringify(data)
         });
         return this.handleResponse(response, endpoint);
     }
 
     // Feature Endpoints
+    getRecognizeWsUrl() {
+        return `${getWsOrigin()}/api/ws/recognize?session_id=${this.sessionId}`;
+    }
     async translateText(text: string, language: string = 'en') {
         return this.post('/text-to-sign', { text, language });
     }
@@ -147,10 +171,6 @@ class ApiService {
 
     async getAchievements() {
         return this.get(`/achievements/${this.sessionId}`);
-    }
-
-    async getMe() {
-        return this.get(`/profile/${this.sessionId}`);
     }
 
     async getProfile() {
@@ -242,11 +262,8 @@ class ApiService {
         this.token = token;
         if (typeof window !== 'undefined') {
             localStorage.setItem('signvista_session_id', sessionId);
-            if (token) {
-                localStorage.setItem('signvista_access_token', token);
-            } else {
-                localStorage.removeItem('signvista_access_token');
-            }
+            // Tokens are managed exclusively via cookies now for security.
+            localStorage.removeItem('signvista_access_token');
         }
     }
 }

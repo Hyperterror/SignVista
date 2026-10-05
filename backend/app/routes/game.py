@@ -12,7 +12,7 @@ Ayush: Start a game → get challenges → submit frames → show final score.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas import (
     GameStartRequest,
@@ -22,6 +22,7 @@ from app.schemas import (
     GameResultResponse,
 )
 from app.session_store import get_session
+from app.dependencies import get_current_user
 from app.utils.frame_utils import decode_base64_frame, validate_frame, resize_frame, FrameDecodeError
 from ml.inference import predict_from_raw_frame
 from ml.vocabulary import WORD_DISPLAY
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/api/game", tags=["Game"])
 
 
 @router.post("/start", response_model=GameStartResponse)
-async def start_game(request: GameStartRequest):
+def start_game(request: GameStartRequest, current_user: dict = Depends(get_current_user)):
     """
     Initialize a new game round.
 
@@ -49,6 +50,9 @@ async def start_game(request: GameStartRequest):
     if not request.sessionId or not request.sessionId.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
 
+    if current_user["user_id"] != request.sessionId:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
     session = get_session(request.sessionId)
     game = session.start_game(duration=request.duration)
 
@@ -61,7 +65,7 @@ async def start_game(request: GameStartRequest):
 
 
 @router.post("/attempt", response_model=GameAttemptResponse)
-async def game_attempt(request: GameAttemptRequest):
+def game_attempt(request: GameAttemptRequest, current_user: dict = Depends(get_current_user)):
     """
     Submit a sign during an active game.
 
@@ -79,6 +83,9 @@ async def game_attempt(request: GameAttemptRequest):
     """
     if not request.sessionId or not request.sessionId.strip():
         raise HTTPException(status_code=400, detail="sessionId is required")
+
+    if current_user["user_id"] != request.sessionId:
+        raise HTTPException(status_code=403, detail="Unauthorized")
 
     session = get_session(request.sessionId)
     game = session.get_game(request.gameId)
@@ -132,7 +139,7 @@ async def game_attempt(request: GameAttemptRequest):
 
 
 @router.get("/result/{session_id}/{game_id}", response_model=GameResultResponse)
-async def game_result(session_id: str, game_id: str):
+def game_result(session_id: str, game_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get final results for a completed game.
 
@@ -140,6 +147,9 @@ async def game_result(session_id: str, game_id: str):
 
     Ayush calls: GET /api/game/result/user-123/a1b2c3d4
     """
+    if current_user["user_id"] != session_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
     session = get_session(session_id)
     game = session.get_game(game_id)
 

@@ -14,6 +14,8 @@ class User(Base):
     phone = Column(String(20), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     preferred_language = Column(String(10), default="en")
+    subscription_tier = Column(String(20), default="free")  # 'free', 'pro', 'welfare'
+    daily_translation_seconds_used = Column(Integer, default=0)
     created_at = Column(Float, default=time.time)
 
     stats = relationship("UserStats", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -32,9 +34,10 @@ class UserStats(Base):
     total_xp = Column(Integer, default=0)
     level = Column(Integer, default=1)
     games_played = Column(Integer, default=0)
-    best_game_score = Column(Integer, default=0)
+    best_score = Column(Integer, default=0)         # Renamed alias for best_game_score
+    best_game_score = Column(Integer, default=0)    # Keep original for backward compat
     unlocked_achievements = Column(JSON, default=list)  # List of string IDs
-    
+
     user = relationship("User", back_populates="stats")
 
 
@@ -49,7 +52,7 @@ class LearningPrecision(Base):
     correct_count = Column(Integer, default=0)
     best_confidence = Column(Float, default=0.0)
     proficiency = Column(Float, default=0.0)  # Calculated percentage
-    last_practiced = Column(Float, default=time.time)
+    last_attempt_time = Column(Float, nullable=True)  # Unix timestamp of last practice
 
     user = relationship("User", back_populates="learning_precision")
 
@@ -60,15 +63,29 @@ class GameSessionHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(50), ForeignKey("users.user_id"))
+    game_id = Column(String(50), nullable=True)  # In-memory game UUID
     score = Column(Integer, default=0)
     words_completed = Column(Integer, default=0)
     total_attempts = Column(Integer, default=0)
     best_streak = Column(Integer, default=0)
     accuracy = Column(Float, default=0.0)
-    timestamp = Column(Float, default=time.time)
+    duration = Column(Integer, default=30)       # Game duration in seconds
+    played_at = Column(Float, default=time.time)  # Game start timestamp
+    timestamp = Column(Float, default=time.time)  # Row insert timestamp
 
     user = relationship("User", back_populates="game_history")
 
+class ChatMessage(Base):
+    """Real-time chat message history."""
+    __tablename__ = "chat_messages"
+
+    id = Column(String(50), primary_key=True, index=True)
+    sender_id = Column(String(50), ForeignKey("users.user_id"), index=True)
+    receiver_id = Column(String(50), ForeignKey("users.user_id"), index=True)
+    content = Column(Text, nullable=False)
+    type = Column(String(20), default="text")
+    timestamp = Column(Float, default=time.time)
+    is_read = Column(Boolean, default=False)
 
 class ChatAnalytics(Base):
     """Logs when users interact with community or AI chats, for broad analytics."""

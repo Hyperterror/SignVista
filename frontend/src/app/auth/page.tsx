@@ -63,7 +63,7 @@ export default function AuthPage() {
                 const result = await api.login(phone, password);
                 if (result.status === 'ok') {
                     toast.success(`Welcome back, ${result.user_name}!`);
-                    setTimeout(() => router.push('/'), 1000);
+                    setTimeout(() => router.push('/dashboard'), 1000);
                 }
             } else {
                 const result = await api.register({
@@ -75,7 +75,7 @@ export default function AuthPage() {
                 });
                 if (result.status === 'ok') {
                     toast.success(`Welcome to SignVista, ${result.user_name}!`);
-                    setTimeout(() => router.push('/'), 1000);
+                    setTimeout(() => router.push('/dashboard'), 1000);
                 }
             }
         } catch (error: any) {

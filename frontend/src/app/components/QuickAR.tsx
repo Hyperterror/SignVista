@@ -31,6 +31,8 @@ export function QuickAR() {
     const requestRef = useRef<number>();
     const lastTimeRef = useRef<number>(0);
 
+    const wsRef = useRef<WebSocket | null>(null);
+
     const startCamera = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -52,10 +54,68 @@ export function QuickAR() {
             setIsActive(false);
             setPrediction(null);
         }
+        if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+        }
     };
 
-    const captureAndProcess = async () => {
-        if (!isActive || !videoRef.current || !canvasRef.current) return;
+    // WebSocket Connection Lifecycle
+    useEffect(() => {
+        if (!isActive) return;
+
+        const wsUrl = api.getRecognizeWsUrl();
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log("WebSocket connected for AR stream");
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    console.error("WS error:", data.error);
+                    return;
+                }
+
+                const endTime = performance.now();
+                setStats({ latency: Math.round(endTime - lastTimeRef.current) });
+                setPrediction(data.prediction || data.word);
+                setConfidence(data.confidence);
+
+                if (data.pose_landmarks) {
+                    drawAROverlay(data as ARResponse);
+                }
+            } catch (e) {
+                console.error("Failed to parse WS message", e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log("WebSocket disconnected");
+        };
+
+        wsRef.current = ws;
+
+        return () => {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                ws.close();
+            }
+        };
+    }, [isActive]);
+
+    // Continuous Frame Streaming
+    const captureAndStream = () => {
+        if (!isActive || !videoRef.current || !canvasRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            if (isActive && requestRef.current !== undefined) {
+                // Wait connected
+                setTimeout(() => {
+                    requestRef.current = requestAnimationFrame(captureAndStream);
+                }, 100);
+            }
+            return;
+        }
 
         const video = videoRef.current;
         const canvas = document.createElement('canvas');
@@ -67,30 +127,18 @@ export function QuickAR() {
         ctx.drawImage(video, 0, 0, 640, 480);
         const frame = canvas.toDataURL('image/jpeg', 0.6);
 
-        const startTime = performance.now();
-        try {
-            const data: ARResponse = await api.getARLandmarks(frame);
-            const endTime = performance.now();
+        lastTimeRef.current = performance.now();
+        wsRef.current.send(JSON.stringify({ frame, module_details: true }));
 
-            setStats({ latency: Math.round(endTime - startTime) });
-            setPrediction(data.prediction);
-            setConfidence(data.confidence);
-
-            drawAROverlay(data);
-        } catch (error) {
-            console.error(error);
-        }
-
-        if (isActive) {
-            setTimeout(() => {
-                requestRef.current = requestAnimationFrame(captureAndProcess);
-            }, 100);
-        }
+        // Manage FPS: Targeting ~10 FPS for inference processing overlap
+        setTimeout(() => {
+            requestRef.current = requestAnimationFrame(captureAndStream);
+        }, 100);
     };
 
     useEffect(() => {
         if (isActive) {
-            requestRef.current = requestAnimationFrame(captureAndProcess);
+            requestRef.current = requestAnimationFrame(captureAndStream);
         } else {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         }

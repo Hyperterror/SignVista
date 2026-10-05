@@ -6,25 +6,29 @@ GET /api/achievements/{sessionId}
 Ayush: Use this for the trophies/badges page.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
 from app.schemas import AchievementsResponse, AchievementInfo
 from app.session_store import get_session, ACHIEVEMENT_DEFINITIONS
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/achievements", tags=["Achievements"])
 
 
 @router.get("/{session_id}", response_model=AchievementsResponse)
-async def get_achievements(session_id: str):
+async def get_achievements(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get all available achievements and their unlocked status for the user.
     """
+    if current_user["user_id"] != session_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
     session = get_session(session_id)
     unlocked = session.unlocked_achievements
-    
+
     achievement_info_list = []
-    
+
     for defn in ACHIEVEMENT_DEFINITIONS:
         is_unlocked = defn["id"] in unlocked
         achievement_info_list.append(AchievementInfo(
@@ -32,9 +36,9 @@ async def get_achievements(session_id: str):
             name=defn["name"],
             description=defn["desc"],
             unlocked=is_unlocked,
-            unlocked_at=None # We don't track the exact time of unlock yet
+            unlocked_at=None,  # We don't track the exact time of unlock yet
         ))
-        
+
     return AchievementsResponse(
         sessionId=session_id,
         total_unlocked=len(unlocked),

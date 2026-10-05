@@ -38,6 +38,12 @@ export default function ARRecognizePage() {
     const lastTimeRef = useRef<number>(0);
     const lastSpokenRef = useRef<string>('');
     const lastPredictionRef = useRef<string | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
+    const isARModeRef = useRef<boolean>(isARMode);
+
+    useEffect(() => {
+        isARModeRef.current = isARMode;
+    }, [isARMode]);
 
     useEffect(() => {
         gsap.fromTo('.camera-main', { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: 'power3.out' });
@@ -82,10 +88,82 @@ export default function ARRecognizePage() {
             setPrediction(null);
             setHint('Camera stopped');
         }
+        if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+        }
     };
 
-    const captureAndProcess = async () => {
-        if (!isActive || !videoRef.current || !canvasRef.current) return;
+    // WebSocket Connection Lifecycle
+    useEffect(() => {
+        if (!isActive) return;
+
+        const wsUrl = api.getRecognizeWsUrl();
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log("WebSocket connected for translation stream");
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    console.error("WS error:", data.error);
+                    return;
+                }
+
+                const endTime = performance.now();
+                setStats({
+                    latency: Math.round(endTime - lastTimeRef.current),
+                    fps: Math.round(1000 / (endTime - lastTimeRef.current))
+                });
+                lastTimeRef.current = endTime;
+
+                const predictedWord = data.prediction || data.word;
+                setPrediction(predictedWord);
+                setConfidence(data.confidence);
+                setHistory(data.history || []);
+                setHint(data.gesture_hint || (data.face_detected ? 'Listening for signs...' : 'Face not detected'));
+
+                if (predictedWord && predictedWord !== lastPredictionRef.current) {
+                    lastPredictionRef.current = predictedWord;
+                    gsap.fromTo('.prediction-badge', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
+                }
+
+                if (isARModeRef.current && data.pose_landmarks) {
+                    drawAROverlay(data as ARResponse);
+                } else if (!isARModeRef.current) {
+                    clearCanvas();
+                }
+            } catch (e) {
+                console.error("Failed to parse WS message", e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log("WebSocket disconnected");
+        };
+
+        wsRef.current = ws;
+
+        return () => {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                ws.close();
+            }
+        };
+    }, [isActive]);
+
+    // Continuous Frame Streaming
+    const captureAndStream = () => {
+        if (!isActive || !videoRef.current || !canvasRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            if (isActive && requestRef.current !== undefined) {
+                setTimeout(() => {
+                    requestRef.current = requestAnimationFrame(captureAndStream);
+                }, 50);
+            }
+            return;
+        }
 
         const video = videoRef.current;
         const canvas = document.createElement('canvas');
@@ -97,53 +175,24 @@ export default function ARRecognizePage() {
         ctx.drawImage(video, 0, 0, 640, 480);
         const frame = canvas.toDataURL('image/jpeg', 0.7);
 
-        const startTime = performance.now();
-        try {
-            const data: ARResponse = await api.getARLandmarks(frame);
-            const endTime = performance.now();
+        lastTimeRef.current = performance.now();
+        wsRef.current.send(JSON.stringify({ frame, module_details: true }));
 
-            setStats({
-                latency: Math.round(endTime - startTime),
-                fps: Math.round(1000 / (endTime - lastTimeRef.current))
-            });
-            lastTimeRef.current = endTime;
-
-            setPrediction(data.prediction);
-            setConfidence(data.confidence);
-            setHistory(data.history || []);
-            setHint(data.gesture_hint || (data.face_detected ? 'Listening for signs...' : 'Face not detected'));
-
-            if (data.prediction && data.prediction !== lastPredictionRef.current) {
-                lastPredictionRef.current = data.prediction;
-                gsap.fromTo('.prediction-badge', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
-            }
-
-            if (isARMode) {
-                drawAROverlay(data);
-            } else {
-                clearCanvas();
-            }
-        } catch (error) {
-            console.error(error);
-        }
-
-        if (isActive) {
-            setTimeout(() => {
-                requestRef.current = requestAnimationFrame(captureAndProcess);
-            }, 50); // Small delay to avoid hammering the server
-        }
+        setTimeout(() => {
+            requestRef.current = requestAnimationFrame(captureAndStream);
+        }, 50); // Small delay to avoid hammering the server
     };
 
     useEffect(() => {
         if (isActive) {
-            requestRef.current = requestAnimationFrame(captureAndProcess);
+            requestRef.current = requestAnimationFrame(captureAndStream);
         } else {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         }
         return () => {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         };
-    }, [isActive, isARMode]);
+    }, [isActive]);
 
     const clearCanvas = () => {
         const canvas = canvasRef.current;
