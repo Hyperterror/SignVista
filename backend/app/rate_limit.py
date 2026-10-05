@@ -63,7 +63,20 @@ limiter = RateLimiter()
 
 
 def client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    """
+    Client IP for rate limiting. X-Forwarded-For is honoured only when the
+    direct peer is a trusted proxy; the right-most untrusted hop is used so a
+    client can't spoof its address by sending its own header.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if peer not in settings.TRUSTED_PROXIES:
+        return peer
+    forwarded = request.headers.get("x-forwarded-for", "")
+    hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+    for hop in reversed(hops):
+        if hop not in settings.TRUSTED_PROXIES:
+            return hop
+    return peer
 
 
 def enforce(key: str, limit: int, window_seconds: float, detail: str = "Too many requests. Please try again later.") -> None:

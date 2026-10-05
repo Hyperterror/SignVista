@@ -131,6 +131,10 @@ class Settings:
 
     # Rate limiting
     RATE_LIMIT_ENABLED: bool = _env_bool("RATE_LIMIT_ENABLED", True)
+    # Reverse proxies (e.g. the Next.js server) whose X-Forwarded-For header is trusted
+    TRUSTED_PROXIES: List[str] = [
+        p.strip() for p in os.getenv("TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip()
+    ]
 
     # ─── JWT Authentication ───────────────────────────────────────────────
     SECRET_KEY: str = _load_secret_key(ENV)
