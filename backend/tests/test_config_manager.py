@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 import pytest
-from backend.ml.config_manager import ConfigurationManager, ModuleConfig, ISLModulesConfig
+from ml.config_manager import ConfigurationManager, ModuleConfig, ISLModulesConfig
 
 
 class TestConfigurationManager:

@@ -32,93 +32,76 @@ class TestPhase3:
         data = response.json()
         assert all(w["category"] == "greetings" for w in data["words"])
 
-    def test_proficiency_tracking(self, client, fake_frame):
-        """Test proficiency increases after successful learn attempt."""
-        session_id = "test-prof-1"
-        
-        # 1. Check initial proficiency (0)
-        response = client.get(f"/api/progress/{session_id}")
-        assert response.status_code == 200
-        assert response.json()["overall_proficiency"] == 0.0
-        
-        # 2. Mock a CORRECT learn attempt
-        # Since we use real ML if loaded, we might need to mock predict_from_raw_frame
-        # But for this test, let's assume session manipulation is safer for logic verification
-        session = get_session(session_id)
+    def test_proficiency_tracking(self, auth_client):
+        uid = auth_client.user_id
+        assert auth_client.get(f"/api/progress/{uid}").json()["overall_proficiency"] == 0.0
+
+        session = get_session(uid)
         session.learn.record_attempt("hello", "hello", 0.95, session)
-        
-        # 3. Check updated proficiency
-        response = client.get(f"/api/progress/{session_id}")
-        data = response.json()
+
+        data = auth_client.get(f"/api/progress/{uid}").json()
         assert data["overall_proficiency"] > 0
         assert data["words_practiced"] == 1
-        
-        # Check detail
-        hello_detail = next(w for w in data["word_details"] if w["word"] == "hello")
-        assert hello_detail["proficiency"] == 100.0
-        assert hello_detail["mastery_tier"] == "Master"
+        hello = next(w for w in data["word_details"] if w["word"] == "hello")
+        assert hello["proficiency"] == 100.0
+        assert hello["mastery_tier"] == "Master"
 
-    def test_learning_path(self, client):
-        """Test that learning path suggests words."""
-        session_id = "test-path-1"
-        response = client.get(f"/api/progress/{session_id}/next")
+    def test_progress_persists_across_restart(self, auth_client):
+        """Learning precision, XP and achievements survive the in-memory session being dropped."""
+        from app.session_store import clear_session
+        uid = auth_client.user_id
+        session = get_session(uid)
+        session.learn.record_attempt("hello", "hello", 0.95, session)
+        xp = session.total_xp
+        clear_session(uid)
+
+        reloaded = get_session(uid)
+        assert reloaded.learn.word_stats["hello"]["correct"] == 1
+        assert reloaded.total_xp == xp
+        assert "first_sign" in reloaded.unlocked_achievements
+        assert reloaded.current_streak == 1
+
+    def test_learning_path(self, auth_client):
+        response = auth_client.get(f"/api/progress/{auth_client.user_id}/next")
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["suggested_words"]) == 3
+        assert len(response.json()["suggested_words"]) == 3
 
-    def test_xp_and_leveling(self, client):
-        """Test XP award and level up."""
-        session_id = "test-xp-1"
-        session = get_session(session_id)
-        
-        # Award 200 XP (should reach Level 2)
+    def test_xp_and_leveling(self, auth_client):
+        uid = auth_client.user_id
+        session = get_session(uid)
         session.award_xp(200, "Test Reward")
         assert session.level == 2
-        
-        # Check dashboard
-        response = client.get(f"/api/dashboard/{session_id}")
-        data = response.json()
+
+        data = auth_client.get(f"/api/dashboard/{uid}").json()
         assert data["xp_info"]["level"] == 2
         assert data["xp_info"]["current_xp"] == 200
-        
-    def test_achievements_unlock(self, client):
-        """Test achievement unlocking."""
-        session_id = "test-ach-1"
-        session = get_session(session_id)
-        
-        # Lock check
-        response = client.get(f"/api/achievements/{session_id}")
-        assert response.json()["total_unlocked"] == 0
-        
-        # Unlock "First Sign" via learn attempt
+
+        notes = auth_client.get(f"/api/notifications/{uid}").json()
+        assert any("Level" in n["message"] for n in notes["notifications"])
+
+    def test_achievements_unlock(self, auth_client):
+        uid = auth_client.user_id
+        session = get_session(uid)
+        assert auth_client.get(f"/api/achievements/{uid}").json()["total_unlocked"] == 0
+
         session.learn.record_attempt("hello", "hello", 0.9, session)
-        
-        # Verify unlock
-        response = client.get(f"/api/achievements/{session_id}")
-        data = response.json()
-        assert data["total_unlocked"] >= 1
-        assert any(a["id"] == "first_sign" and a["unlocked"] for a in data["achievements"])
 
-    def test_history_timeline(self, client):
-        """Test activity history logging."""
-        session_id = "test-hist-1"
-        session = get_session(session_id)
-        
-        session.add_activity("custom_event", {"msg": "hello"})
-        
-        response = client.get(f"/api/history/{session_id}")
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["activities"]) > 0
+        data = auth_client.get(f"/api/achievements/{uid}").json()
+        first = next(a for a in data["achievements"] if a["id"] == "first_sign")
+        assert first["unlocked"] and first["unlocked_at"]
+
+    def test_history_timeline(self, auth_client):
+        uid = auth_client.user_id
+        get_session(uid).add_activity("custom_event", {"msg": "hello"}, xp_earned=5)
+
+        data = auth_client.get(f"/api/history/{uid}").json()
         assert data["activities"][0]["type"] == "custom_event"
+        assert data["activities"][0]["xp_earned"] == 5
 
-    def test_dashboard_aggregated(self, client):
-        """Test full dashboard response."""
-        session_id = "test-dash-full"
-        response = client.get(f"/api/dashboard/{session_id}")
-        assert response.status_code == 200
-        data = response.json()
-        assert "xp_info" in data
-        assert "recent_activity" in data
-        assert "suggested_next_words" in data
-        assert data["total_achievements"] == 12
+    def test_dashboard_aggregated(self, auth_client):
+        data = auth_client.get(f"/api/dashboard/{auth_client.user_id}").json()
+        assert {"xp_info", "recent_activity", "suggested_next_words", "longest_streak"} <= data.keys()
+        assert data["total_achievements"] == len(ACHIEVEMENT_DEFINITIONS)
+
+    def test_dashboard_other_user_forbidden(self, auth_client):
+        assert auth_client.get("/api/dashboard/someone-else").status_code == 403

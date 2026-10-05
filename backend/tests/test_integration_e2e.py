@@ -111,7 +111,8 @@ def test_vocabulary_manager_has_all_module_vocabularies():
     assert translation_word != "unknown", "Translation module should map index 0 to a word"
 
 
-def test_api_route_supports_module_details(client):
+def test_api_route_supports_module_details(auth_client):
+    client = auth_client
     """
     Test that /api/recognize-frame endpoint supports module_details parameter.
     """
@@ -131,7 +132,6 @@ def test_api_route_supports_module_details(client):
     response = client.post(
         "/api/recognize-frame",
         json={
-            "sessionId": "test-session-e2e",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )
@@ -147,7 +147,6 @@ def test_api_route_supports_module_details(client):
     response = client.post(
         "/api/recognize-frame?return_module_details=true",
         json={
-            "sessionId": "test-session-e2e-2",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )
@@ -183,7 +182,8 @@ def test_inference_engine_uses_modules_based_on_configuration():
                 f"Disabled module {module_name} should not be in enabled_modules list"
 
 
-def test_complete_end_to_end_flow_with_all_modules_enabled(client):
+def test_complete_end_to_end_flow_with_all_modules_enabled(auth_client):
+    client = auth_client
     """
     Test complete end-to-end flow:
     1. Application starts and initializes all components
@@ -215,7 +215,6 @@ def test_complete_end_to_end_flow_with_all_modules_enabled(client):
     frame_response = client.post(
         "/api/recognize-frame?return_module_details=true",
         json={
-            "sessionId": "test-e2e-complete",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )

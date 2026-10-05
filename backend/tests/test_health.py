@@ -9,7 +9,7 @@ def test_health_returns_200(client):
     assert "model_loaded" in data
     assert "active_sessions" in data
     assert "vocabulary_size" in data
-    assert data["version"] == "1.0.0"
+    assert data["version"] == "1.1.0"
 
 
 def test_root_returns_info(client):

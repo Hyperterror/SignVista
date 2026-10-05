@@ -250,121 +250,104 @@ def test_execute_modules_parallel_below_threshold(
 # ─── Tests for predict_from_raw_frame ─────────────────────────────────
 
 
-@patch('ml.inference.detect_face')
-@patch('ml.inference._isl_modules_initialized', True)
+def _hand_landmarks():
+    from ml.keypoint_extractor import FrameLandmarks
+    hand = [(0.5, 0.5, 0.0, 1.0)] * 21
+    return FrameLandmarks(pose=[], left_hand=hand, right_hand=[], hands=[hand], image_width=640, image_height=480)
+
+
+@patch('ml.inference.extract_landmarks', side_effect=lambda frame: _hand_landmarks())
+@patch('ml.inference.is_model_loaded', return_value=True)
+@patch('ml.inference._loaded_module', return_value=object())
 @patch('ml.inference._config_manager')
 @patch('ml.inference.execute_modules_parallel')
 @patch('ml.inference.select_final_prediction')
 def test_predict_from_raw_frame_with_module_details(
-    mock_select, mock_execute, mock_config, mock_detect_face, 
+    mock_select, mock_execute, mock_config, _loaded, _model_loaded, _extract,
     sample_frame, sample_predictions
 ):
-    """Test predict_from_raw_frame returns module details when requested."""
-    # Setup mocks
-    mock_detect_face.return_value = True
+    """Module details are returned when requested."""
+    mock_config.config.require_face_detection = False
     mock_config.is_module_enabled.return_value = True
     mock_config.get_prediction_strategy.return_value = "priority"
     mock_execute.return_value = sample_predictions
     mock_select.return_value = sample_predictions[1]  # Recognition selected
-    
-    # Execute
+
     word, confidence, status, results, module_details = predict_from_raw_frame(
-        "test_session",
-        sample_frame,
-        return_landmarks=False,
-        return_module_details=True
+        "test_session", sample_frame, return_landmarks=False, return_module_details=True
     )
-    
-    # Verify
+
     assert word == "hello"
     assert confidence == 0.92
     assert status == "ready"
-    assert module_details is not None
-    assert "active_modules" in module_details
-    assert "predictions" in module_details
-    assert "selected" in module_details
+    assert {"active_modules", "predictions", "selected"} <= module_details.keys()
     assert module_details["selected"]["module"] == "recognition"
 
 
-@patch('ml.inference.detect_face')
-def test_predict_from_raw_frame_no_face(sample_frame):
-    """Test predict_from_raw_frame returns no_face when no face detected."""
+@patch('ml.inference._config_manager')
+def test_predict_from_raw_frame_no_face(mock_config, sample_frame):
+    """no_face is returned when the face gate is enabled and no face is visible."""
+    mock_config.config.require_face_detection = True
     with patch('ml.inference.detect_face', return_value=False):
         word, confidence, status, results, module_details = predict_from_raw_frame(
-            "test_session",
-            sample_frame,
-            return_landmarks=False,
-            return_module_details=False
+            "test_session", sample_frame
         )
-        
-        assert word is None
-        assert confidence == 0.0
-        assert status == "no_face"
+    assert (word, confidence, status) == (None, 0.0, "no_face")
 
 
-@patch('ml.inference.detect_face')
-@patch('ml.inference._isl_modules_initialized', True)
+@patch('ml.inference.is_model_loaded', return_value=False)
+@patch('ml.inference._config_manager')
+def test_predict_without_models_reports_no_model(mock_config, _loaded, sample_frame):
+    """Without models (and mocks disabled) the pipeline must not invent predictions."""
+    mock_config.config.require_face_detection = False
+    word, confidence, status, _, _ = predict_from_raw_frame("test_session", sample_frame)
+    assert (word, status) == (None, "no_model")
+
+
+@patch('ml.inference.extract_landmarks', side_effect=lambda frame: _hand_landmarks())
+@patch('ml.inference.is_model_loaded', return_value=True)
+@patch('ml.inference._loaded_module', return_value=object())
+@patch('ml.inference._collecting_status', return_value=None)
 @patch('ml.inference._config_manager')
 @patch('ml.inference.execute_modules_parallel')
 def test_predict_from_raw_frame_low_confidence(
-    mock_execute, mock_config, mock_detect_face, sample_frame
+    mock_execute, mock_config, _collecting, _loaded, _model_loaded, _extract, sample_frame
 ):
-    """Test predict_from_raw_frame returns low_confidence when no predictions above threshold."""
-    mock_detect_face.return_value = True
+    """low_confidence when hands are visible but no module is confident."""
+    mock_config.config.require_face_detection = False
     mock_config.is_module_enabled.return_value = True
-    mock_execute.return_value = []  # No predictions above threshold
-    
+    mock_execute.return_value = []
+
     word, confidence, status, results, module_details = predict_from_raw_frame(
-        "test_session",
-        sample_frame,
-        return_landmarks=False,
-        return_module_details=True
+        "test_session", sample_frame, return_module_details=True
     )
-    
-    assert word is None
-    assert confidence == 0.0
-    assert status == "low_confidence"
+    assert (word, confidence, status) == (None, 0.0, "low_confidence")
 
 
-@patch('ml.inference.detect_face')
-@patch('ml.inference._isl_modules_initialized', False)
+@patch('ml.inference.extract_landmarks', side_effect=lambda frame: _hand_landmarks())
+@patch('ml.inference._loaded_module', return_value=None)
 @patch('ml.inference._config_manager')
 @patch('ml.inference._model_loaded', True)
 @patch('ml.inference._model')
-@patch('ml.inference.extract_keypoints')
 @patch('ml.inference.get_buffer')
 @patch('ml.inference.get_word_by_index')
 def test_predict_from_raw_frame_fallback_to_lstm(
-    mock_get_word, mock_get_buffer, mock_extract, mock_model,
-    mock_config, mock_detect_face, sample_frame
+    mock_get_word, mock_get_buffer, mock_model, mock_config, _loaded, _extract, sample_frame
 ):
-    """Test predict_from_raw_frame falls back to LSTM when ISL modules unavailable."""
-    # Setup mocks
-    mock_detect_face.return_value = True
+    """The standalone LSTM is used when no ISL module is loaded."""
+    mock_config.config.require_face_detection = False
     mock_config.config.fallback_to_existing_lstm = True
-    
-    # Mock keypoint extraction
-    mock_extract.return_value = (np.zeros(258), None)
-    
-    # Mock buffer
+    mock_config.is_module_enabled.return_value = True
+
     mock_buffer = Mock()
     mock_buffer.is_ready = True
     mock_buffer.get_sequence.return_value = np.zeros((1, 45, 258))
     mock_get_buffer.return_value = mock_buffer
-    
-    # Mock model prediction
     mock_model.predict.return_value = np.array([[0.1, 0.2, 0.95]])
     mock_get_word.return_value = "thank_you"
-    
-    # Execute
-    word, confidence, status, results, module_details = predict_from_raw_frame(
-        "test_session",
-        sample_frame,
-        return_landmarks=False,
-        return_module_details=False
-    )
-    
-    # Verify fallback to LSTM
+
+    word, confidence, status, results, module_details = predict_from_raw_frame("test_session", sample_frame)
+
     assert word == "thank_you"
     assert confidence == 0.95
     assert status == "ready"

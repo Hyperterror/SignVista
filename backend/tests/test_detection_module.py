@@ -82,7 +82,6 @@ class TestDetectionModule:
         """Test that detection module initializes correctly."""
         assert detection_module is not None
         assert detection_module.model is not None
-        assert detection_module.hands is not None
         assert 0.0 <= detection_module.confidence_threshold <= 1.0
     
     def test_extract_hand_landmarks_with_hands(self, detection_module, test_frame):
