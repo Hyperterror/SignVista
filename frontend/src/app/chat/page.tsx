@@ -1,148 +1,212 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import {
-    Search,
-    MoreVertical,
-    Send,
-    Plus,
-    Phone,
-    Video,
-    Info,
-    Smile,
-    Paperclip,
-    ChevronLeft,
-    Sparkles
-} from 'lucide-react';
-import { api, getWsOrigin } from '../utils/api';
+import { Search, Send, Plus, ChevronLeft, Sparkles } from 'lucide-react';
+import { api } from '../utils/api';
 import SignToolbox from '../components/chat/SignToolbox';
 import { toast } from 'sonner';
 import gsap from 'gsap';
 
+interface Contact {
+    id: string;
+    name: string;
+    status: string;
+    last_message: string;
+    last_message_time: number;
+    unread_count?: number;
+}
+
+interface ChatMessage {
+    id: string;
+    sender_id: string;
+    receiver_id: string;
+    content: string;
+    timestamp: number;
+    type: string;
+}
+
 export default function ChatPage() {
-    const [contacts, setContacts] = useState<any[]>([]);
-    const [selectedContact, setSelectedContact] = useState<any>(null);
-    const [messages, setMessages] = useState<any[]>([]);
+    const [contacts, setContacts] = useState<Contact[]>([]);
+    const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [isToolboxOpen, setIsToolboxOpen] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [activeUsers, setActiveUsers] = useState<{ user_id: string; name: string }[]>([]);
+    const [search, setSearch] = useState('');
+    const [sessionId, setSessionId] = useState(api.getSessionId());
     const chatEndRef = useRef<HTMLDivElement>(null);
     const ws = useRef<WebSocket | null>(null);
-    const sessionId = api.getSessionId(); // My user ID
+    const selectedRef = useRef<Contact | null>(null);
 
     useEffect(() => {
-        let isMounted = true;
-        let connectTimeout: NodeJS.Timeout;
+        selectedRef.current = selectedContact;
+    }, [selectedContact]);
 
-        const loadContacts = async () => {
-            try {
-                const data = await api.get('/chat/contacts');
-                if (isMounted) {
-                    setContacts(data);
-                    if (data.length > 0 && !selectedContact) setSelectedContact(data[0]);
-                }
-            } catch (error) {
-                if (isMounted) toast.error('Failed to load contacts');
-            } finally {
-                if (isMounted) setIsLoading(false);
+    const loadContacts = async (selectId?: string, selectName?: string) => {
+        try {
+            const data: Contact[] = await api.getContacts();
+            let list = data;
+            if (selectId && !data.some((c) => c.id === selectId)) {
+                list = [{ id: selectId, name: selectName || 'New chat', status: 'offline', last_message: '', last_message_time: Date.now() / 1000 }, ...data];
             }
-        };
+            setContacts(list);
+            setSelectedContact((current) => {
+                if (selectId) return list.find((c) => c.id === selectId) || current;
+                return current ?? list[0] ?? null;
+            });
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to load contacts');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-        const connectWs = () => {
-            if (!sessionId || ws.current) return;
+    // Initial load (supports /chat?to=<userId>&name=<name> from the community page)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        api.ensureSessionId().then(setSessionId).catch(() => { });
+        loadContacts(params.get('to') || undefined, params.get('name') || undefined);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-            const wsOrigin = getWsOrigin();
-            const wsUrl = `${wsOrigin}/api/chat/ws/${sessionId}`;
-            console.log("Connecting to WS:", wsUrl);
-            const socket = new WebSocket(wsUrl);
+    // Authenticated WebSocket with reconnect
+    useEffect(() => {
+        let closedByUs = false;
+        let retries = 0;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const connect = async () => {
+            let url: string;
+            try {
+                url = await api.getChatWsUrl();
+            } catch {
+                return;
+            }
+            if (closedByUs) return;
+            const socket = new WebSocket(url);
             ws.current = socket;
 
-            socket.onopen = () => {
-                if (!isMounted) {
-                    socket.close();
-                    return;
-                }
-                console.log("Chat WebSocket Connected");
-            };
+            socket.onopen = () => { retries = 0; };
 
             socket.onmessage = (event) => {
-                if (!isMounted) return;
+                let msg: any;
                 try {
-                    const incomingMsg = JSON.parse(event.data);
-                    setMessages((prev) => [...prev, incomingMsg]);
-                } catch (e) {
-                    console.error("Failed to parse WS message", e);
+                    msg = JSON.parse(event.data);
+                } catch {
+                    return;
                 }
-            };
-
-
-            socket.onerror = (err: any) => {
-                // Ignore errors if we are unmounting or if it's a transient handshake close
-                if (!isMounted) return;
-
-                // WebSocket errors are notoriously opaque in browsers (often {} Event)
-                // We only toast if the connection actually fails to open after the delay
-                if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
-                    console.error("WS Error Details:", err);
-                    toast.error("WebSocket connection error");
+                if (msg.error) {
+                    toast.error(msg.error);
+                    return;
                 }
+                const current = selectedRef.current;
+                const inThread = current && (msg.sender_id === current.id || msg.receiver_id === current.id);
+                if (inThread) {
+                    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+                }
+                // Keep the sidebar previews (and new conversations) up to date
+                setContacts((prev) => {
+                    const otherId = msg.sender_id === api.getSessionId() ? msg.receiver_id : msg.sender_id;
+                    const existing = prev.find((c) => c.id === otherId);
+                    if (!existing) {
+                        loadContacts();
+                        return prev;
+                    }
+                    const updated = {
+                        ...existing,
+                        last_message: msg.content,
+                        last_message_time: msg.timestamp,
+                        unread_count: inThread ? 0 : (existing.unread_count || 0) + (msg.sender_id === otherId ? 1 : 0),
+                    };
+                    return [updated, ...prev.filter((c) => c.id !== otherId)];
+                });
             };
 
             socket.onclose = (event) => {
-                if (isMounted) {
-                    console.log("Chat WebSocket Disconnected", event.code);
-                    ws.current = null;
-                }
+                if (ws.current === socket) ws.current = null;
+                if (closedByUs || event.code === 1008) return;
+                if (retries < 6) timer = setTimeout(connect, 1000 * 2 ** retries++);
             };
         };
 
-        loadContacts();
-
-        // Add a 300ms delay before connecting to let React 18 strict mode 
-        // finish its double-mount cycle and ensure the environment is stable.
-        connectTimeout = setTimeout(connectWs, 300);
-
+        connect();
         return () => {
-            isMounted = false;
-            clearTimeout(connectTimeout);
-            if (ws.current) {
-                const socket = ws.current;
-                if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-                    socket.close();
-                }
-                ws.current = null;
-            }
+            closedByUs = true;
+            if (timer) clearTimeout(timer);
+            const socket = ws.current;
+            ws.current = null;
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) socket.close();
         };
-    }, [sessionId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
+    // Load history whenever the conversation changes
     useEffect(() => {
-        if (selectedContact) {
-            // For now, clear history and rely strictly on real-time broadcasts
-            // In a production app, we'd fetch SQLite history here.
+        if (!selectedContact) {
             setMessages([]);
+            return;
         }
-    }, [selectedContact]);
+        let cancelled = false;
+        api.getChatMessages(selectedContact.id)
+            .then((data: ChatMessage[]) => { if (!cancelled) setMessages(data); })
+            .catch((e: any) => { if (!cancelled) toast.error(e.message || 'Failed to load messages'); });
+        setContacts((prev) => prev.map((c) => (c.id === selectedContact.id ? { ...c, unread_count: 0 } : c)));
+        return () => { cancelled = true; };
+    }, [selectedContact?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    const openPicker = async () => {
+        setIsPickerOpen((open) => !open);
+        try {
+            const data = await api.getActiveUsers();
+            setActiveUsers(data.users || []);
+        } catch {
+            setActiveUsers([]);
+        }
+    };
+
+    const startConversation = (userId: string, name: string) => {
+        setIsPickerOpen(false);
+        const existing = contacts.find((c) => c.id === userId);
+        if (existing) {
+            setSelectedContact(existing);
+            return;
+        }
+        const contact: Contact = { id: userId, name, status: 'online', last_message: '', last_message_time: Date.now() / 1000 };
+        setContacts((prev) => [contact, ...prev]);
+        setSelectedContact(contact);
+    };
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim() || !selectedContact || !ws.current) return;
-
-        const msgContent = newMessage;
+        const content = newMessage.trim();
+        if (!content || !selectedContact) return;
+        if (selectedContact.id === 'official_bot') {
+            toast.info("The SignVista Team account doesn't accept replies.");
+            return;
+        }
         setNewMessage('');
 
-        const payload = {
-            receiver_id: selectedContact.id,
-            content: msgContent,
-            type: 'text'
-        };
-
-        // Send directly via WebSocket instead of HTTP POST
-        ws.current.send(JSON.stringify(payload));
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ receiver_id: selectedContact.id, content, type: 'text' }));
+            return;
+        }
+        // HTTP fallback when the socket is reconnecting
+        try {
+            const msg = await api.sendChatMessage(selectedContact.id, content);
+            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+        } catch (err: any) {
+            setNewMessage(content);
+            toast.error(err.message || 'Message could not be sent');
+        }
     };
+
+    const visibleContacts = contacts.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
 
     if (isLoading) return <div className="h-screen flex items-center justify-center font-bold text-[#105F68]">Initializing Secure Chat...</div>;
 
@@ -159,22 +223,50 @@ export default function ChatPage() {
                 <div className="p-6 border-b border-gray-100 dark:border-gray-800">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Messages</h2>
-                        <button className="p-2 bg-[#105F68] text-white rounded-xl shadow-lg hover:scale-110 transition-transform">
+                        <button
+                            onClick={openPicker}
+                            title="Start a new conversation"
+                            aria-label="Start a new conversation"
+                            className="p-2 bg-[#105F68] text-white rounded-xl shadow-lg hover:scale-110 transition-transform"
+                        >
                             <Plus className="w-5 h-5" />
                         </button>
                     </div>
+                    {isPickerOpen && (
+                        <div className="mb-4 p-3 rounded-2xl bg-white dark:bg-gray-800 shadow-lg border border-gray-100 dark:border-gray-700">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Online now</p>
+                            {activeUsers.length === 0 ? (
+                                <p className="text-sm text-gray-500">Nobody else is online right now. You can also message people from the Community page.</p>
+                            ) : (
+                                activeUsers.map((u) => (
+                                    <button
+                                        key={u.user_id}
+                                        onClick={() => startConversation(u.user_id, u.name)}
+                                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-semibold"
+                                    >
+                                        {u.name}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    )}
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#105F68] transition-colors" />
                         <input
                             type="text"
                             placeholder="Search chats..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
                             className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-gray-800 border-none shadow-sm focus:ring-2 focus:ring-[#105F68]/10 transition-all text-sm font-medium"
                         />
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-                    {contacts.map((contact) => (
+                    {visibleContacts.length === 0 && (
+                        <p className="p-4 text-sm text-gray-500">No conversations yet. Press + to start one.</p>
+                    )}
+                    {visibleContacts.map((contact) => (
                         <button
                             key={contact.id}
                             onClick={() => setSelectedContact(contact)}
@@ -191,7 +283,15 @@ export default function ChatPage() {
                             <div className="flex-1 text-left min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
                                     <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">{contact.name}</h4>
-                                    <span className="text-[10px] text-gray-400 font-medium">Live</span>
+                                    {(contact.unread_count ?? 0) > 0 ? (
+                                        <span className="min-w-5 h-5 px-1.5 rounded-full bg-[#105F68] text-white text-[10px] font-bold flex items-center justify-center">
+                                            {contact.unread_count}
+                                        </span>
+                                    ) : contact.last_message_time ? (
+                                        <span className="text-[10px] text-gray-400 font-medium">
+                                            {new Date(contact.last_message_time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    ) : null}
                                 </div>
                                 <p className="text-xs text-gray-500 truncate dark:text-gray-400">{contact.last_message}</p>
                             </div>
@@ -215,17 +315,10 @@ export default function ChatPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-gray-900 dark:text-gray-100">{selectedContact.name}</h3>
-                                    <p className="text-[10px] font-bold text-green-500 uppercase tracking-widest">{selectedContact.status}</p>
+                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${selectedContact.status === 'online' ? 'text-green-500' : 'text-gray-400'}`}>{selectedContact.status}</p>
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <button className="p-2.5 text-gray-400 hover:text-[#105F68] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all">
-                                    <Phone className="w-5 h-5" />
-                                </button>
-                                <button className="p-2.5 text-gray-400 hover:text-[#105F68] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all">
-                                    <Video className="w-5 h-5" />
-                                </button>
-                                <div className="w-px h-8 bg-gray-100 dark:border-gray-800 mx-2" />
                                 <button
                                     onClick={() => setIsToolboxOpen(!isToolboxOpen)}
                                     className={`p-2.5 rounded-xl transition-all flex items-center gap-2 font-bold text-xs ${isToolboxOpen ? 'bg-[#105F68] text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
@@ -233,16 +326,13 @@ export default function ChatPage() {
                                     <Sparkles className="w-5 h-5" />
                                     Sign Tools
                                 </button>
-                                <button className="p-2.5 text-gray-400 hover:text-gray-900 rounded-xl transition-all">
-                                    <MoreVertical className="w-5 h-5" />
-                                </button>
                             </div>
                         </div>
 
                         {/* Message Thread */}
                         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6 bg-gray-50/20 dark:bg-transparent">
-                            {threadMessages.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.sender_id === sessionId ? 'justify-end' : 'justify-start'}`}>
+                            {threadMessages.map((msg) => (
+                                <div key={msg.id} className={`flex ${msg.sender_id === sessionId ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[70%] group relative flex flex-col ${msg.sender_id === sessionId ? 'items-end' : 'items-start'}`}>
                                         <div className={`p-4 rounded-[24px] text-sm font-medium shadow-sm transition-all hover:shadow-md ${msg.sender_id === sessionId ? 'bg-[#105F68] text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-none'}`}>
                                             {msg.content}
@@ -259,13 +349,13 @@ export default function ChatPage() {
                         {/* Chat Input */}
                         <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
                             <form onSubmit={handleSendMessage} className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-2 rounded-[24px] border border-gray-100 dark:border-gray-700 shadow-inner">
-                                <button type="button" className="p-3 text-gray-400 hover:text-[#105F68] transition-colors"><Smile className="w-6 h-6" /></button>
-                                <button type="button" className="p-3 text-gray-400 hover:text-[#105F68] transition-colors"><Paperclip className="w-6 h-6" /></button>
                                 <input
                                     type="text"
                                     value={newMessage}
                                     onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type a message to send over live WebSocket..."
+                                    placeholder={selectedContact.id === 'official_bot' ? 'This account does not accept replies' : 'Type a message...'}
+                                    maxLength={2000}
+                                    disabled={selectedContact.id === 'official_bot'}
                                     className="flex-1 bg-transparent border-none outline-none py-3 px-2 text-sm font-medium text-gray-900 dark:text-gray-100"
                                 />
                                 <button type="submit" className="p-4 bg-gradient-to-br from-[#105F68] to-[#3A9295] text-white rounded-2xl shadow-xl hover:scale-105 transition-transform"><Send className="w-5 h-5" /></button>

@@ -24,6 +24,18 @@ interface ARResponse {
     history: string[];
 }
 
+const prettyWord = (w: string) =>
+    w.length <= 2 ? w.toUpperCase() : w.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const statusHint = (status: string | undefined): string => {
+    if (!status) return 'Listening for signs...';
+    if (status.startsWith('collecting')) return `Analyzing... ${status.split('_').pop()}`;
+    if (status === 'no_hands') return 'Raise your hands to start';
+    if (status === 'no_face') return 'Please show your face';
+    if (status === 'no_model' || status === 'landmarks_unavailable') return 'Sign recognition is unavailable right now';
+    return 'Listening for signs...';
+};
+
 export default function ARRecognizePage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,8 +46,6 @@ export default function ARRecognizePage() {
     const [hint, setHint] = useState('Position yourself in view to start');
     const [history, setHistory] = useState<string[]>([]);
     const [stats, setStats] = useState({ fps: 0, latency: 0 });
-    const requestRef = useRef<number>();
-    const lastTimeRef = useRef<number>(0);
     const lastSpokenRef = useRef<string>('');
     const lastPredictionRef = useRef<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
@@ -49,9 +59,18 @@ export default function ARRecognizePage() {
         gsap.fromTo('.camera-main', { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: 'power3.out' });
     }, []);
 
+    // Voice feedback follows the user's "Voice Feedback" setting
+    const soundEnabledRef = useRef(true);
+    useEffect(() => {
+        api.getSettings().then((s) => { soundEnabledRef.current = s.sound_enabled; }).catch(() => { });
+        const onSettings = (e: Event) => { soundEnabledRef.current = (e as CustomEvent).detail?.sound_enabled ?? true; };
+        window.addEventListener('signvista:settings', onSettings);
+        return () => window.removeEventListener('signvista:settings', onSettings);
+    }, []);
+
     useEffect(() => {
         if (prediction && isActive && prediction !== lastSpokenRef.current && confidence > 0.7) {
-            if ('speechSynthesis' in window) {
+            if (soundEnabledRef.current && 'speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(prediction);
                 utterance.rate = 1.0;
@@ -84,114 +103,139 @@ export default function ARRecognizePage() {
         if (videoRef.current && videoRef.current.srcObject) {
             const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
             tracks.forEach(track => track.stop());
-            setIsActive(false);
-            setPrediction(null);
-            setHint('Camera stopped');
         }
-        if (wsRef.current) {
-            wsRef.current.close();
-            wsRef.current = null;
-        }
+        setIsActive(false);
+        setPrediction(null);
+        setHint('Camera stopped');
     };
 
-    // WebSocket Connection Lifecycle
-    useEffect(() => {
-        if (!isActive) return;
+    // Release the camera when leaving the page
+    useEffect(() => () => {
+        const stream = videoRef.current?.srcObject as MediaStream | null;
+        stream?.getTracks().forEach((t) => t.stop());
+    }, []);
 
-        const wsUrl = api.getRecognizeWsUrl();
-        const ws = new WebSocket(wsUrl);
+    // ─── Streaming: one frame in flight at a time (send next frame on reply) ───
+    const activeRef = useRef(false);
+    const frameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const sentAtRef = useRef(0);
+    const MIN_FRAME_INTERVAL_MS = 66; // ~15 fps upper bound
 
-        ws.onopen = () => {
-            console.log("WebSocket connected for translation stream");
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    console.error("WS error:", data.error);
-                    return;
-                }
-
-                const endTime = performance.now();
-                setStats({
-                    latency: Math.round(endTime - lastTimeRef.current),
-                    fps: Math.round(1000 / (endTime - lastTimeRef.current))
-                });
-                lastTimeRef.current = endTime;
-
-                const predictedWord = data.prediction || data.word;
-                setPrediction(predictedWord);
-                setConfidence(data.confidence);
-                setHistory(data.history || []);
-                setHint(data.gesture_hint || (data.face_detected ? 'Listening for signs...' : 'Face not detected'));
-
-                if (predictedWord && predictedWord !== lastPredictionRef.current) {
-                    lastPredictionRef.current = predictedWord;
-                    gsap.fromTo('.prediction-badge', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
-                }
-
-                if (isARModeRef.current && data.pose_landmarks) {
-                    drawAROverlay(data as ARResponse);
-                } else if (!isARModeRef.current) {
-                    clearCanvas();
-                }
-            } catch (e) {
-                console.error("Failed to parse WS message", e);
-            }
-        };
-
-        ws.onclose = () => {
-            console.log("WebSocket disconnected");
-        };
-
-        wsRef.current = ws;
-
-        return () => {
-            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                ws.close();
-            }
-        };
-    }, [isActive]);
-
-    // Continuous Frame Streaming
-    const captureAndStream = () => {
-        if (!isActive || !videoRef.current || !canvasRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            if (isActive && requestRef.current !== undefined) {
-                setTimeout(() => {
-                    requestRef.current = requestAnimationFrame(captureAndStream);
-                }, 50);
-            }
+    const sendFrame = () => {
+        const ws = wsRef.current;
+        const video = videoRef.current;
+        if (!activeRef.current || !ws || ws.readyState !== WebSocket.OPEN || !video) return;
+        if (video.readyState < 2 || !video.videoWidth) {
+            frameTimerRef.current = setTimeout(sendFrame, 100);
             return;
         }
-
-        const video = videoRef.current;
-        const canvas = document.createElement('canvas');
+        const canvas = captureCanvasRef.current ?? (captureCanvasRef.current = document.createElement('canvas'));
         canvas.width = 640;
-        canvas.height = 480;
+        canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        sentAtRef.current = performance.now();
+        ws.send(JSON.stringify({
+            frame: canvas.toDataURL('image/jpeg', 0.7),
+            ar: isARModeRef.current,
+        }));
+    };
 
-        ctx.drawImage(video, 0, 0, 640, 480);
-        const frame = canvas.toDataURL('image/jpeg', 0.7);
-
-        lastTimeRef.current = performance.now();
-        wsRef.current.send(JSON.stringify({ frame, module_details: true }));
-
-        setTimeout(() => {
-            requestRef.current = requestAnimationFrame(captureAndStream);
-        }, 50); // Small delay to avoid hammering the server
+    const scheduleNextFrame = () => {
+        const elapsed = performance.now() - sentAtRef.current;
+        frameTimerRef.current = setTimeout(sendFrame, Math.max(0, MIN_FRAME_INTERVAL_MS - elapsed));
     };
 
     useEffect(() => {
-        if (isActive) {
-            requestRef.current = requestAnimationFrame(captureAndStream);
-        } else {
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
-        }
-        return () => {
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        if (!isActive) return;
+        activeRef.current = true;
+        let retries = 0;
+        let closedByUs = false;
+
+        const connect = async () => {
+            let url: string;
+            try {
+                url = await api.getRecognizeWsUrl();
+            } catch (e: any) {
+                toast.error(e?.message || 'Could not start recognition');
+                return;
+            }
+            if (!activeRef.current) return;
+
+            const ws = new WebSocket(url);
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                retries = 0;
+                setHint('Listening for signs...');
+                sendFrame();
+            };
+
+            ws.onmessage = (event) => {
+                let data: any;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    scheduleNextFrame();
+                    return;
+                }
+                if (data.error) {
+                    console.warn('Recognition error:', data.error);
+                } else if (data.buffer_status !== 'throttled') {
+                    const latency = Math.round(performance.now() - sentAtRef.current);
+                    setStats({ latency, fps: Math.min(30, Math.round(1000 / Math.max(latency, MIN_FRAME_INTERVAL_MS))) });
+
+                    const predictedWord: string | null = data.prediction ?? data.word ?? null;
+                    setPrediction(predictedWord ? prettyWord(predictedWord) : null);
+                    setConfidence(data.confidence ?? 0);
+                    setHistory((data.history || []).map(prettyWord));
+                    setHint(data.gesture_hint || statusHint(data.buffer_status));
+
+                    if (predictedWord && predictedWord !== lastPredictionRef.current) {
+                        lastPredictionRef.current = predictedWord;
+                        gsap.fromTo('.prediction-badge', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
+                    }
+
+                    if (isARModeRef.current && data.pose_landmarks) {
+                        drawAROverlay(data as ARResponse);
+                    } else {
+                        clearCanvas();
+                    }
+                }
+                scheduleNextFrame();
+            };
+
+            ws.onclose = (event) => {
+                if (wsRef.current === ws) wsRef.current = null;
+                if (closedByUs || !activeRef.current) return;
+                if (event.code === 1008) {
+                    toast.error('Session expired. Please sign in again.');
+                    return;
+                }
+                if (retries < 5) {
+                    const delay = 500 * 2 ** retries++;
+                    setHint('Reconnecting...');
+                    frameTimerRef.current = setTimeout(connect, delay);
+                } else {
+                    toast.error('Lost connection to the recognition server.');
+                }
+            };
         };
+
+        connect();
+
+        return () => {
+            closedByUs = true;
+            activeRef.current = false;
+            if (frameTimerRef.current) clearTimeout(frameTimerRef.current);
+            const ws = wsRef.current;
+            wsRef.current = null;
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) ws.close();
+            clearCanvas();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive]);
 
     const clearCanvas = () => {
@@ -208,6 +252,11 @@ export default function ARRecognizePage() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
+        const video = videoRef.current;
+        if (video && video.videoWidth && (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const { width, height } = canvas;
 
@@ -320,7 +369,7 @@ export default function ARRecognizePage() {
                                 ref={canvasRef}
                                 width={640}
                                 height={480}
-                                className="absolute inset-0 w-full h-full pointer-events-none scale-x-[-1]"
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none scale-x-[-1]"
                             />
 
                             {/* UI Overlays on Camera */}

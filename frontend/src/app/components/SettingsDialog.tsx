@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Moon, Sun, Volume2, Target, X, Save } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { Settings, Moon, Sun, Volume2, Bell, X, Save } from 'lucide-react';
+import { ThemePreference, useTheme } from '../context/ThemeContext';
 import { api } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -12,10 +12,10 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
-    const { theme, toggleTheme } = useTheme();
+    const { preference, setPreference } = useTheme();
     const [isLoading, setIsLoading] = useState(false);
     const [settings, setSettings] = useState({
-        theme: 'system',
+        theme: preference as string,
         notifications_enabled: true,
         sound_enabled: true,
         daily_goal_minutes: 15
@@ -29,31 +29,28 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
     const loadSettings = async () => {
         try {
-            const sessionId = api.getSessionId();
-            const res = await api.get(`/settings/${sessionId}`);
+            const res = await api.getSettings();
             setSettings({
                 theme: res.theme,
                 notifications_enabled: res.notifications_enabled,
                 sound_enabled: res.sound_enabled,
                 daily_goal_minutes: res.daily_goal_minutes
             });
-            // Synchronize frontend context theme
-            if (res.theme !== 'system' && res.theme !== theme) {
-                toggleTheme(); // Simple sync mechanism 
-            }
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            toast.error(e.message || 'Could not load settings');
         }
     };
 
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            await api.put('/settings', settings);
+            await api.updateSettings(settings);
+            setPreference(settings.theme as ThemePreference);
+            window.dispatchEvent(new CustomEvent('signvista:settings', { detail: settings }));
             toast.success('Settings updated!');
             onClose();
-        } catch (e) {
-            toast.error('Failed to update settings');
+        } catch (e: any) {
+            toast.error(e.message || 'Failed to update settings');
         } finally {
             setIsLoading(false);
         }
@@ -92,11 +89,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </div>
                         <select
                             value={settings.theme}
-                            onChange={(e) => {
-                                setSettings({ ...settings, theme: e.target.value });
-                                if (e.target.value === 'dark' && theme !== 'dark') toggleTheme();
-                                if (e.target.value === 'light' && theme !== 'light') toggleTheme();
-                            }}
+                            onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
                             className="bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#105F68]"
                         >
                             <option value="light">Light</option>
@@ -110,8 +103,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         <div className="flex items-center gap-3">
                             <Volume2 className="w-5 h-5 text-gray-500" />
                             <div>
-                                <p className="font-semibold text-gray-900 dark:text-gray-100">Sound Effects</p>
-                                <p className="text-xs text-gray-500">Interface audio feedback</p>
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">Voice Feedback</p>
+                                <p className="text-xs text-gray-500">Speak recognized signs aloud while translating</p>
                             </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -125,25 +118,24 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </label>
                     </div>
 
-                    {/* Daily Goal */}
+                    {/* Notifications */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <Target className="w-5 h-5 text-gray-500" />
+                            <Bell className="w-5 h-5 text-gray-500" />
                             <div>
-                                <p className="font-semibold text-gray-900 dark:text-gray-100">Daily Learn Goal</p>
-                                <p className="text-xs text-gray-500">Minutes per day</p>
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">Notifications</p>
+                                <p className="text-xs text-gray-500">Show the unread badge for level-ups and achievements</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <label className="relative inline-flex items-center cursor-pointer">
                             <input
-                                type="number"
-                                className="w-16 text-center bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm font-bold"
-                                value={settings.daily_goal_minutes}
-                                onChange={(e) => setSettings({ ...settings, daily_goal_minutes: Number(e.target.value) })}
-                                min="5" max="120" step="5"
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={settings.notifications_enabled}
+                                onChange={(e) => setSettings({ ...settings, notifications_enabled: e.target.checked })}
                             />
-                            <span className="text-xs text-gray-500 font-bold uppercase">min</span>
-                        </div>
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#105F68]"></div>
+                        </label>
                     </div>
                 </div>
 

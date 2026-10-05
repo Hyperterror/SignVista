@@ -164,7 +164,7 @@ export function StatsDashboard({ totalWords, practiced, proficiency, streak }: S
             <StatCard
                 icon={Hand}
                 iconColor="#0EA5E9"
-                progressValue={practiced > 0 ? Math.round((practiced / totalWords) * 100) : 0}
+                progressValue={practiced > 0 && totalWords > 0 ? Math.min(100, Math.round((practiced / totalWords) * 100)) : 0}
                 progressColor="#0EA5E9"
                 mainStat={practiced.toString()}
                 subStat=""
@@ -193,7 +193,7 @@ export function StatsDashboard({ totalWords, practiced, proficiency, streak }: S
             <StatCard
                 icon={Gamepad2}
                 iconColor="#10B981"
-                progressValue={streak * 10}
+                progressValue={Math.min(100, streak * 10)}
                 progressColor="#10B981"
                 mainStat={streak.toString()}
                 subStat=" days"

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Send, Trash2, Copy, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, BACKEND_ORIGIN } from '../utils/api';
+import { api } from '../utils/api';
+import { SignMedia } from '../components/SignMedia';
 
 interface SignWord {
     word: string;
@@ -52,7 +53,8 @@ export default function TextToSignPage() {
         }
 
         try {
-            const response = await api.translateText(inputText);
+            const language = /[\u0900-\u097F]/.test(inputText) ? 'hi' : 'en';
+            const response = await api.translateText(inputText, language);
             setOutputSigns(response.words);
 
             if (response.matched_words === 0) {
@@ -182,15 +184,11 @@ export default function TextToSignPage() {
                                         <div key={index} className={`sign-${index} relative group w-full max-w-[200px]`}>
                                             <div className="relative aspect-video rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg border border-gray-100 dark:border-gray-700 hover:shadow-2xl transition-all duration-300">
                                                 {sign.found ? (
-                                                    <img
-                                                        src={`${BACKEND_ORIGIN}${sign.gif_url}`}
-                                                        alt={sign.display_name}
-                                                        className="w-full h-full object-cover"
-                                                    />
+                                                    <SignMedia gifUrl={sign.gif_url} label={sign.display_name} className="w-full h-full" />
                                                 ) : (
                                                     <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-200">
                                                         <span className="text-sm font-medium text-gray-500">No Sign</span>
-                                                        <span className="text-xs text-center text-gray-400 mt-1">Found for "{sign.word}"</span>
+                                                        <span className="text-xs text-center text-gray-400 mt-1">Found for &ldquo;{sign.word}&rdquo;</span>
                                                     </div>
                                                 )}
 
