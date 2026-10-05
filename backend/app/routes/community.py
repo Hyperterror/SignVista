@@ -1,48 +1,93 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+"""
+SignVista — Community Routes
+
+GET  /api/community/feed                    — paginated global feed
+POST /api/community/post                    — create a post
+POST /api/community/like                    — toggle like (one per user per post)
+GET  /api/community/posts/{id}/comments     — list comments
+POST /api/community/posts/{id}/comments     — add a comment
+GET  /api/community/active-users            — users active in the last 15 minutes
+"""
+
 import time
 import uuid
+from typing import Dict, List
 
-from app.schemas import CommunityFeedResponse, CreatePostRequest, LikeRequest, CommunityPost, ActiveUsersResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models import CommunityPostBase
 from app.dependencies import get_current_user
+from app.models import CommunityCommentBase, CommunityPostBase, PostLike
+from app.rate_limit import enforce
+from app.schemas import (
+    ActiveUsersResponse,
+    Comment,
+    CommunityFeedResponse,
+    CommunityPost,
+    CreateCommentRequest,
+    CreatePostRequest,
+    LikeRequest,
+)
 from app.session_store import get_active_users
 
 router = APIRouter(prefix="/api/community", tags=["Community"])
 
+
+def _to_schema(p: CommunityPostBase, liked: bool) -> CommunityPost:
+    return CommunityPost(
+        id=p.id,
+        user_name=p.user_name,
+        avatar_initials=p.avatar_initials,
+        content=p.content,
+        likes=p.likes or 0,
+        comments_count=p.comments_count or 0,
+        liked_by_me=liked,
+        comments=[],
+        timestamp=p.timestamp,
+        is_official=bool(p.is_official),
+        achievement_text=p.achievement_text,
+        tags=p.tags or [],
+    )
+
+
 @router.get("/feed", response_model=CommunityFeedResponse)
-async def get_feed(db: Session = Depends(get_db)):
-    """Get the global community feed directly from SQLite."""
-    posts_db = db.query(CommunityPostBase).order_by(CommunityPostBase.timestamp.desc()).all()
-    
-    formatted_posts = []
-    for p in posts_db:
-        # Convert JSON tags safely
-        tags = p.tags if p.tags else []
-        
-        formatted_posts.append(CommunityPost(
-            id=p.id,
-            user_name=p.user_name,
-            avatar_initials=p.avatar_initials,
-            content=p.content,
-            likes=p.likes,
-            comments_count=p.comments_count,
-            comments=[], 
-            timestamp=p.timestamp,
-            is_official=p.is_official,
-            achievement_text=p.achievement_text,
-            tags=tags
-        ))
-    return CommunityFeedResponse(posts=formatted_posts)
+def get_feed(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: Dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Global community feed, newest first."""
+    base = db.query(CommunityPostBase)
+    total = base.count()
+    posts = base.order_by(CommunityPostBase.timestamp.desc()).offset(offset).limit(limit).all()
+
+    liked_ids = set()
+    if posts:
+        liked_ids = {
+            r[0] for r in db.query(PostLike.post_id).filter(
+                PostLike.user_id == current_user["user_id"],
+                PostLike.post_id.in_([p.id for p in posts]),
+            )
+        }
+
+    return CommunityFeedResponse(
+        posts=[_to_schema(p, p.id in liked_ids) for p in posts],
+        total=total,
+        has_more=offset + len(posts) < total,
+    )
+
 
 @router.post("/post", response_model=CommunityPost)
-async def create_post(request: CreatePostRequest, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Create a new community post inside SQLite DB."""
-    new_id = str(uuid.uuid4())[:8]
-    db_post = CommunityPostBase(
-        id=new_id,
+def create_post(request: CreatePostRequest, current_user: Dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create a new community post as the authenticated user."""
+    enforce(f"post:{current_user['user_id']}", limit=10, window_seconds=600,
+            detail="You're posting too often. Please wait a few minutes.")
+    post = CommunityPostBase(
+        id=uuid.uuid4().hex[:12],
+        user_id=current_user["user_id"],
         user_name=current_user["name"],
         avatar_initials=current_user["name"][:2].upper(),
         content=request.content,
@@ -51,39 +96,79 @@ async def create_post(request: CreatePostRequest, current_user: dict = Depends(g
         timestamp=time.time(),
         is_official=False,
         achievement_text=None,
-        tags=request.tags
+        tags=request.tags,
     )
-    db.add(db_post)
+    db.add(post)
     db.commit()
-    db.refresh(db_post)
+    db.refresh(post)
+    return _to_schema(post, False)
 
-    return CommunityPost(
-        id=db_post.id,
-        user_name=db_post.user_name,
-        avatar_initials=db_post.avatar_initials,
-        content=db_post.content,
-        likes=db_post.likes,
-        comments_count=db_post.comments_count,
-        comments=[],
-        timestamp=db_post.timestamp,
-        tags=db_post.tags if db_post.tags else []
-    )
 
 @router.post("/like")
-async def like_post(request: LikeRequest, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Like a community post updating SQLite natively."""
-    db_post = db.query(CommunityPostBase).filter(CommunityPostBase.id == request.postId).first()
-    if not db_post:
+def like_post(request: LikeRequest, current_user: Dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Toggle the current user's like on a post."""
+    post = db.query(CommunityPostBase).filter(CommunityPostBase.id == request.postId).first()
+    if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-        
-    db_post.likes += 1
+
+    existing = db.query(PostLike).filter(
+        PostLike.post_id == post.id, PostLike.user_id == current_user["user_id"]
+    ).first()
+    if existing:
+        db.delete(existing)
+        liked = False
+    else:
+        db.add(PostLike(post_id=post.id, user_id=current_user["user_id"]))
+        liked = True
+    try:
+        db.flush()
+    except IntegrityError:
+        # Concurrent duplicate like — treat as already liked
+        db.rollback()
+        liked = True
+
+    post.likes = db.query(PostLike).filter(PostLike.post_id == post.id).count()
     db.commit()
-    db.refresh(db_post)
-    
-    return {"status": "ok", "likes": db_post.likes}
+    return {"status": "ok", "likes": post.likes, "liked": liked}
+
+
+@router.get("/posts/{post_id}/comments", response_model=List[Comment])
+def list_comments(post_id: str, current_user: Dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    if db.query(CommunityPostBase.id).filter(CommunityPostBase.id == post_id).first() is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    rows = (
+        db.query(CommunityCommentBase)
+        .filter(CommunityCommentBase.post_id == post_id)
+        .order_by(CommunityCommentBase.timestamp.asc())
+        .limit(500)
+        .all()
+    )
+    return [Comment(id=c.id, user_name=c.user_name, content=c.content, timestamp=c.timestamp) for c in rows]
+
+
+@router.post("/posts/{post_id}/comments", response_model=Comment)
+def add_comment(post_id: str, request: CreateCommentRequest,
+                current_user: Dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    enforce(f"comment:{current_user['user_id']}", limit=30, window_seconds=600,
+            detail="You're commenting too often. Please wait a few minutes.")
+    post = db.query(CommunityPostBase).filter(CommunityPostBase.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    comment = CommunityCommentBase(
+        id=uuid.uuid4().hex[:12],
+        post_id=post_id,
+        user_id=current_user["user_id"],
+        user_name=current_user["name"],
+        content=request.content,
+        timestamp=time.time(),
+    )
+    db.add(comment)
+    post.comments_count = (post.comments_count or 0) + 1
+    db.commit()
+    return Comment(id=comment.id, user_name=comment.user_name, content=comment.content, timestamp=comment.timestamp)
+
 
 @router.get("/active-users", response_model=ActiveUsersResponse)
-async def get_users():
-    """Get list of currently active users from the in-memory proxy."""
-    users = get_active_users()
-    return ActiveUsersResponse(users=users)
+def get_users(current_user: Dict = Depends(get_current_user)):
+    """Users active in the last 15 minutes (excluding yourself)."""
+    return ActiveUsersResponse(users=get_active_users(exclude_user_id=current_user["user_id"]))

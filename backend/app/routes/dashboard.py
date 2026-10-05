@@ -7,25 +7,24 @@ Ayush: The ultimate personalized dashboard endpoint.
        Call this when the user lands on the dashboard.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from app.dependencies import get_current_user
-from typing import List
+from fastapi import APIRouter, Depends
+from app.dependencies import get_current_user, require_own_session
 
 from app.schemas import DashboardResponse, XPLevelInfo, ActivityEvent
-from app.session_store import get_session, USER_LEVEL_THRESHOLDS
+from app.session_store import get_session, USER_LEVEL_THRESHOLDS, ACHIEVEMENT_DEFINITIONS
 from app.routes.history import format_activity_title, format_activity_desc
+from ml.inference import get_recognizable_words
 from ml.vocabulary import WORD_LIST
 
 router = APIRouter(prefix="/api", tags=["Dashboard"])
 
 
 @router.get("/dashboard/{session_id}", response_model=DashboardResponse)
-async def get_dashboard(session_id: str, current_user: dict = Depends(get_current_user)):
+def get_dashboard(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get aggregated dashboard summary.
     """
-    if current_user["user_id"] != session_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    require_own_session(current_user, session_id)
 
     session = get_session(session_id)
     
@@ -61,7 +60,8 @@ async def get_dashboard(session_id: str, current_user: dict = Depends(get_curren
             type=h["type"],
             timestamp=h["timestamp"],
             title=format_activity_title(h["type"], h["data"]),
-            description=format_activity_desc(h["type"], h["data"])
+            description=format_activity_desc(h["type"], h["data"]),
+            xp_earned=h.get("xp_earned", 0),
         ))
 
     # Mastery stats
@@ -72,19 +72,21 @@ async def get_dashboard(session_id: str, current_user: dict = Depends(get_curren
 
     # Learning path (simple suggest)
     practiced = session.learn.word_stats.keys()
-    unpracticed = [w for w in WORD_LIST if w not in practiced]
-    suggested = unpracticed[:3] if unpracticed else WORD_LIST[:3]
+    pool = get_recognizable_words() or WORD_LIST
+    unpracticed = [w for w in pool if w.lower() not in practiced]
+    suggested = unpracticed[:3] if unpracticed else pool[:3]
 
     return DashboardResponse(
         sessionId=session_id,
-        user_name=current_user.get("name", "User") if current_user else "User",
+        user_name=current_user.get("name") or "User",
         xp_info=xp_info,
         overall_proficiency=session.learn.get_overall_proficiency(),
         words_practiced=len(practiced),
         words_mastered=total_mastered,
         current_streak=session.current_streak,
+        longest_streak=session.longest_streak,
         recent_activity=recent,
-        total_achievements=12,
+        total_achievements=len(ACHIEVEMENT_DEFINITIONS),
         unlocked_achievements_count=len(session.unlocked_achievements),
         best_game_score=session.best_game_score,
         suggested_next_words=suggested
