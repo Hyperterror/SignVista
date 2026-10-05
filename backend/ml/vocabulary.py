@@ -124,7 +124,8 @@ def _load_translation_vocab() -> None:
     """Load translation vocabulary from translation_classes.json."""
     global TRANSLATION_VOCAB
     
-    config_path = os.path.join("../ISL-Unified-Project", "config", "translation_classes.json")
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    config_path = os.path.join(repo_root, "ISL-Unified-Project", "config", "translation_classes.json")
     
     try:
         if os.path.exists(config_path):
@@ -156,7 +157,7 @@ def _load_translation_vocab() -> None:
                 {"module": "translation", "index": 8, "word": "X", "display_name": "X", "priority": 3, "category": "letter"},
                 {"module": "translation", "index": 9, "word": "Y", "display_name": "Y", "priority": 3, "category": "letter"},
             ]
-    except Exception as e:
+    except Exception:
         # Fallback to hardcoded values on any error
         TRANSLATION_VOCAB = [
             {"module": "translation", "index": 0, "word": "G", "display_name": "G", "priority": 3, "category": "letter"},

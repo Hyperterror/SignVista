@@ -35,6 +35,22 @@ def _import_cv2():
     return _cv2
 
 
+def build_recognition_model(num_classes: int = 3, seq_len: int = 45, features: int = 258):
+    """Word-level LSTM architecture exactly as trained in the ISL Unified Project."""
+    tf = _import_tensorflow()
+    layers = tf.keras.layers
+    return tf.keras.Sequential([
+        layers.Input(shape=(seq_len, features)),
+        layers.LSTM(64, return_sequences=True, activation="relu"),
+        layers.LSTM(128, return_sequences=True, activation="relu"),
+        layers.LSTM(256, return_sequences=True, activation="relu"),
+        layers.LSTM(64, return_sequences=False, activation="relu"),
+        layers.Dense(64, activation="relu"),
+        layers.Dense(32, activation="relu"),
+        layers.Dense(num_classes, activation="softmax"),
+    ])
+
+
 class ModelLoader:
     """
     Manages loading and validation of ISL Unified Project models.
@@ -46,14 +62,15 @@ class ModelLoader:
     - YOLO hand detector (cross-hands.cfg and weights)
     """
     
-    def __init__(self, base_path: str = "../ISL-Unified-Project/models/"):
+    def __init__(self, base_path: Optional[str] = None):
         """
         Initialize model loader.
         
         Args:
             base_path: Base directory containing model subdirectories
         """
-        self.base_path = base_path
+        from app.config import settings
+        self.base_path = base_path or settings.ISL_MODELS_DIR
         self.models: Dict[str, Any] = {}
         self.model_info: Dict[str, Dict[str, Any]] = {}
         self._gpu_available = None
@@ -103,12 +120,12 @@ class ModelLoader:
             self._check_gpu_availability()
             
             # Load model
-            model = tf.keras.models.load_model(model_path)
+            model = tf.keras.models.load_model(model_path, compile=False)
             
             # Validate model
             test_input = np.random.randn(1, 42).astype(np.float32)
             if not self.validate_model(model, test_input, expected_shape=(1, 35)):
-                logger.error(f"❌ Detection model validation failed")
+                logger.error("❌ Detection model validation failed")
                 return None
             
             self.models["detection"] = model
@@ -147,13 +164,18 @@ class ModelLoader:
             # Check GPU availability
             self._check_gpu_availability()
             
-            # Load model
-            model = tf.keras.models.load_model(model_path)
+            # The shipped .hdf5 holds weights only, so rebuild the training
+            # architecture (ISL-Unified-Project/recognition/app.py) and load into it.
+            try:
+                model = tf.keras.models.load_model(model_path, compile=False)
+            except ValueError:
+                model = build_recognition_model(num_classes=3)
+                model.load_weights(model_path)
             
             # Validate model
             test_input = np.random.randn(1, 45, 258).astype(np.float32)
             if not self.validate_model(model, test_input, expected_shape=(1, 3)):
-                logger.error(f"❌ Recognition model validation failed")
+                logger.error("❌ Recognition model validation failed")
                 return None
             
             self.models["recognition"] = model
@@ -193,12 +215,12 @@ class ModelLoader:
             self._check_gpu_availability()
             
             # Load SavedModel format
-            model = tf.keras.models.load_model(model_path)
+            model = tf.keras.models.load_model(model_path, compile=False)
             
             # Validate model
             test_input = np.random.randn(1, 224, 224, 3).astype(np.float32)
             if not self.validate_model(model, test_input, expected_shape=(1, 10)):
-                logger.error(f"❌ Translation model validation failed")
+                logger.error("❌ Translation model validation failed")
                 return None
             
             self.models["translation"] = model
@@ -220,8 +242,8 @@ class ModelLoader:
     
     def load_yolo_detector(
         self, 
-        config_path: str = "../ISL-Unified-Project/config/yolo/cross-hands.cfg",
-        weights_path: str = "../ISL-Unified-Project/config/yolo/cross-hands.weights"
+        config_path: Optional[str] = None,
+        weights_path: Optional[str] = None
     ) -> Optional[Any]:
         """
         Load YOLO hand detector using OpenCV DNN backend.
@@ -233,13 +255,18 @@ class ModelLoader:
         Returns:
             Loaded YOLO net or None if loading fails
         """
+        from app.config import REPO_ROOT
+        yolo_dir = os.path.join(str(REPO_ROOT), "ISL-Unified-Project", "config", "yolo")
+        config_path = config_path or os.path.join(yolo_dir, "cross-hands.cfg")
+        weights_path = weights_path or os.path.join(yolo_dir, "cross-hands.weights")
+
         if not os.path.exists(config_path):
             logger.warning(f"⚠️ YOLO config not found at {config_path}")
             return None
         
         if not os.path.exists(weights_path):
             logger.warning(f"⚠️ YOLO weights not found at {weights_path}")
-            logger.info(f"ℹ️ YOLO weights file is large and may need to be downloaded separately")
+            logger.info("ℹ️ YOLO weights file is large and may need to be downloaded separately")
             return None
         
         try:

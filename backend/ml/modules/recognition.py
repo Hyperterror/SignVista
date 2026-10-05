@@ -13,13 +13,14 @@ Features:
 
 import time
 import logging
+import threading
 from typing import Optional, Dict, Any
 import numpy as np
 
 from . import ModulePrediction
 from ..vocabulary import get_word_by_module_index, get_display_name
 from ..keypoint_extractor import extract_keypoints
-from ..buffer_manager import get_buffer, clear_buffer
+from ..buffer_manager import get_buffer, clear_buffer, KEYPOINT_DIM
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +49,16 @@ class RecognitionModule:
         preprocessing_params = config.get("preprocessing_params", {})
         self.buffer_size = preprocessing_params.get("buffer_size", 45)
         self.clear_threshold = preprocessing_params.get("clear_threshold", 0.8)
+        # Minimum share of buffered frames that must contain a hand before predicting
+        self.min_hand_ratio = preprocessing_params.get("min_hand_ratio", 0.3)
+        self._model_lock = threading.Lock()
         
         logger.info(
             f"✅ Recognition module initialized "
             f"(buffer_size={self.buffer_size}, threshold={self.confidence_threshold})"
         )
     
-    def predict(self, frame: np.ndarray, session_id: str) -> Optional[ModulePrediction]:
+    def predict(self, frame: Optional[np.ndarray], session_id: str, keypoints: Optional[np.ndarray] = None) -> Optional[ModulePrediction]:
         """
         Process frame with temporal buffering and return word prediction.
         
@@ -73,7 +77,8 @@ class RecognitionModule:
         try:
             # Extract pose keypoints
             preprocessing_start = time.time()
-            keypoints = self.extract_pose_keypoints(frame)
+            if keypoints is None:
+                keypoints = self.extract_pose_keypoints(frame)
             preprocessing_time = time.time() - preprocessing_start
             
             if keypoints is None:
@@ -81,7 +86,7 @@ class RecognitionModule:
                 return None
             
             # Get buffer for this session
-            buffer = get_buffer(session_id)
+            buffer = get_buffer(session_id, self.buffer_size)
             
             # Add keypoints to buffer
             buffer.append(keypoints)
@@ -100,9 +105,17 @@ class RecognitionModule:
                 logger.debug("Failed to get sequence from buffer")
                 return None
             
+            # Skip windows where the signer's hands were mostly absent (avoids
+            # confident garbage predictions on an empty scene)
+            hand_frames = np.any(sequence[0, :, 132:] != 0, axis=1).mean()
+            if hand_frames < self.min_hand_ratio:
+                logger.debug(f"Recognition skipped: hands present in only {hand_frames:.0%} of frames")
+                return None
+
             # Run inference
             inference_start = time.time()
-            predictions = self.model.predict(sequence, verbose=0)
+            with self._model_lock:
+                predictions = self.model.predict(sequence, verbose=0)
             inference_time = time.time() - inference_start
             
             # Get class with highest confidence
@@ -176,7 +189,7 @@ class RecognitionModule:
             keypoints, _ = extract_keypoints(frame, return_results=False)
             
             # Verify shape
-            if keypoints.shape[0] != 258:
+            if keypoints.shape[0] != KEYPOINT_DIM:
                 logger.warning(
                     f"Expected 258 keypoints, got {keypoints.shape[0]}"
                 )
