@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import gsap from 'gsap';
-import { Type, Mic, MicOff, Send, Trash2, X } from 'lucide-react';
+import { Type, Mic, MicOff, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../utils/api';
 import { SignMedia } from '../SignMedia';
@@ -52,7 +51,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
         try {
             const response = await api.translateText(inputText);
             setOutputSigns(response.words);
-        } catch (error) {
+        } catch {
             toast.error('Sign conversion failed');
         } finally {
             setIsProcessing(false);
@@ -77,7 +76,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
         try {
             const response = await api.translateText(transcript);
             setOutputSigns(response.words);
-        } catch (error) {
+        } catch {
             toast.error('Voice conversion failed');
         } finally {
             setIsProcessing(false);

@@ -8,7 +8,7 @@ const PUBLIC_PATHS = new Set(['/', '/auth']);
  * HttpOnly session cookie. The backend still validates every request; this
  * just avoids rendering protected pages for signed-out visitors.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const { pathname, search } = request.nextUrl;
     if (PUBLIC_PATHS.has(pathname)) {
         return NextResponse.next();

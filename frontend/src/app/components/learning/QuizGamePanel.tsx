@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle2, XCircle, Flame, RefreshCw } from "lucide-react";
 import { SignMedia } from "../SignMedia";
 import { AG_EASE, DictionaryWord } from "../../learning/types";
@@ -22,10 +22,17 @@ function shuffle<T>(items: T[]): T[] {
     return a;
 }
 
+function makeQuestion(pool: DictionaryWord[]): Question | null {
+    if (pool.length < 4) return null;
+    const answer = pool[Math.floor(Math.random() * pool.length)];
+    const distractors = shuffle(pool.filter((w) => w.word !== answer.word)).slice(0, 3);
+    return { answer, options: shuffle([answer, ...distractors]) };
+}
+
 /** "Which sign is this?" — built from the real ISL dictionary. */
 export function QuizGamePanel({ dictionary }: { dictionary: DictionaryWord[] }) {
     const pool = useMemo(() => dictionary.filter((w) => w.category !== "alphabet"), [dictionary]);
-    const [question, setQuestion] = useState<Question | null>(null);
+    const [question, setQuestion] = useState<Question | null>(() => makeQuestion(pool));
     const [selected, setSelected] = useState<string | null>(null);
     const [round, setRound] = useState(1);
     const [score, setScore] = useState(0);
@@ -33,15 +40,10 @@ export function QuizGamePanel({ dictionary }: { dictionary: DictionaryWord[] }) 
     const [bestStreak, setBestStreak] = useState(0);
     const [finished, setFinished] = useState(false);
 
-    const nextQuestion = useCallback(() => {
-        if (pool.length < 4) return;
-        const answer = pool[Math.floor(Math.random() * pool.length)];
-        const distractors = shuffle(pool.filter((w) => w.word !== answer.word)).slice(0, 3);
-        setQuestion({ answer, options: shuffle([answer, ...distractors]) });
+    const nextQuestion = () => {
+        setQuestion(makeQuestion(pool));
         setSelected(null);
-    }, [pool]);
-
-    useEffect(() => { nextQuestion(); }, [nextQuestion]);
+    };
 
     const choose = (word: string) => {
         if (selected || !question) return;

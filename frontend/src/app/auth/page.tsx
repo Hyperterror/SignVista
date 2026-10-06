@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { Mail, Lock, User, ArrowRight, Loader2, Sparkles, Phone } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/app/utils/api';
 import { toast } from 'sonner';

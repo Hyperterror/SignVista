@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useSyncExternalStore, ReactNode } from 'react';
 
 type Theme = 'light' | 'dark';
 export type ThemePreference = Theme | 'system';
@@ -16,44 +16,64 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const STORAGE_KEY = 'signvista-theme';
+const CHANGE_EVENT = 'signvista-theme-change';
+const DEFAULT_PREFERENCE: ThemePreference = 'dark';
 
-const systemTheme = (): Theme =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+// ── Stored preference (localStorage, synced across tabs) ──
+function readPreference(): ThemePreference {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : DEFAULT_PREFERENCE;
+  } catch {
+    return DEFAULT_PREFERENCE;
+  }
+}
+
+function subscribePreference(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
+}
+
+// ── OS colour scheme ──
+const LIGHT_QUERY = '(prefers-color-scheme: light)';
+
+function readSystemTheme(): Theme {
+  return window.matchMedia?.(LIGHT_QUERY).matches ? 'light' : 'dark';
+}
+
+function subscribeSystemTheme(onChange: () => void) {
+  const mq = window.matchMedia?.(LIGHT_QUERY);
+  mq?.addEventListener('change', onChange);
+  return () => mq?.removeEventListener('change', onChange);
+}
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>('dark');
-  const [theme, setTheme] = useState<Theme>('dark');
-  const [mounted, setMounted] = useState(false);
+  const preference = useSyncExternalStore(subscribePreference, readPreference, () => DEFAULT_PREFERENCE);
+  const systemTheme = useSyncExternalStore(subscribeSystemTheme, readSystemTheme, () => 'dark' as Theme);
+  const theme: Theme = preference === 'system' ? systemTheme : preference;
 
+  // Sync the <html> class (an external system) with the resolved theme
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
-    if (saved === 'light' || saved === 'dark' || saved === 'system') setPreferenceState(saved);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
+  const setPreference = useCallback((pref: ThemePreference) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, pref);
+    } catch {
+      // storage unavailable (private mode); the change still applies for this page
+    }
+    window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);
 
-  // Resolve preference -> applied theme, following OS changes when "system"
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem(STORAGE_KEY, preference);
-    if (preference !== 'system') {
-      setTheme(preference);
-      return;
-    }
-    setTheme(systemTheme());
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const onChange = () => setTheme(systemTheme());
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, [preference, mounted]);
-
-  useEffect(() => {
-    if (mounted) document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme, mounted]);
-
-  const toggleTheme = () => setPreferenceState(theme === 'dark' ? 'light' : 'dark');
+  const toggleTheme = useCallback(() => setPreference(theme === 'dark' ? 'light' : 'dark'), [theme, setPreference]);
 
   return (
-    <ThemeContext.Provider value={{ theme, preference, setPreference: setPreferenceState, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, preference, setPreference, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

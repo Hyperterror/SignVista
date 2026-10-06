@@ -69,7 +69,7 @@ export default function TextToSignPage() {
                     { scale: 1, rotation: 0, opacity: 1, duration: 0.5, delay: index * 0.1, ease: 'back.out(2)' }
                 );
             });
-        } catch (error) {
+        } catch {
             toast.error('Failed to connect to translation engine');
         } finally {
             setIsProcessing(false);

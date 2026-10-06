@@ -84,6 +84,8 @@ class ApiService {
             const next = encodeURIComponent(window.location.pathname + window.location.search);
             // Clear the (invalid) cookie first so the route guard doesn't loop
             fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'same-origin' })
+                // Not a React component, so no router here; a full navigation also resets client state
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 .finally(() => { window.location.href = `/auth?next=${next}`; });
         }
     }

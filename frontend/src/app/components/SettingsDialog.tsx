@@ -21,26 +21,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         daily_goal_minutes: 15
     });
 
-    useEffect(() => {
-        if (isOpen) {
-            loadSettings();
-        }
-    }, [isOpen]);
-
-    const loadSettings = async () => {
-        try {
-            const res = await api.getSettings();
-            setSettings({
-                theme: res.theme,
-                notifications_enabled: res.notifications_enabled,
-                sound_enabled: res.sound_enabled,
-                daily_goal_minutes: res.daily_goal_minutes
-            });
-        } catch (e: any) {
-            toast.error(e.message || 'Could not load settings');
-        }
-    };
-
     const handleSave = async () => {
         setIsLoading(true);
         try {
@@ -55,6 +35,23 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let ignore = false;
+        api.getSettings()
+            .then((res) => {
+                if (ignore) return;
+                setSettings({
+                    theme: res.theme,
+                    notifications_enabled: res.notifications_enabled,
+                    sound_enabled: res.sound_enabled,
+                    daily_goal_minutes: res.daily_goal_minutes,
+                });
+            })
+            .catch((e: any) => toast.error(e.message || 'Could not load settings'));
+        return () => { ignore = true; };
+    }, [isOpen]);
 
     if (!isOpen) return null;
 

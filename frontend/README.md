@@ -1,6 +1,6 @@
 # SignVista Frontend
 
-Next.js 15 (App Router) + Tailwind CSS. See the [root README](../README.md)
+Next.js 16 (App Router, Turbopack) + React 19 + Tailwind CSS. See the [root README](../README.md)
 for setup.
 
 ## How it talks to the backend
@@ -12,7 +12,7 @@ for setup.
   `ws(s)://<page hostname>:NEXT_PUBLIC_BACKEND_PORT`, or at
   `NEXT_PUBLIC_WS_URL` if set. They authenticate with a short-lived ticket
   from `api.getWsUrl()`.
-- `src/middleware.ts` redirects signed-out visitors to `/auth?next=...`
+- `src/proxy.ts` (the Next 16 replacement for middleware) redirects signed-out visitors to `/auth?next=...`
   for every page except `/` and `/auth`.
 - All API calls go through `src/app/utils/api.ts`.
 
@@ -35,7 +35,8 @@ for setup.
 
 ```bash
 npm run dev      # development server on :3000
-npm run lint     # ESLint (also enforced during build)
+npm run lint      # ESLint flat config (next build no longer lints)
+npm run typecheck # tsc --noEmit
 npm run build    # production build (standalone output for Docker)
 npm start
 ```

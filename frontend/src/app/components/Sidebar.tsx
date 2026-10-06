@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useMediaQuery } from '../utils/useMediaQuery';
 import { useTheme } from '../context/ThemeContext';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
@@ -10,23 +11,17 @@ import { api } from '../utils/api';
 import { useRouter } from 'next/navigation';
 import {
   Home,
-  LayoutDashboard,
   BookOpen,
   Search,
   Users,
   Camera,
   Type,
   Mic,
-  Star,
   User,
   Settings,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
   MessageSquare,
-  Award,
   Trophy,
-  Activity,
   Menu,
   X,
   Sun,
@@ -46,13 +41,9 @@ export function Sidebar() {
   const [userData, setUserData] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +111,7 @@ export function Sidebar() {
         initial={false}
         animate={{
           width: isHovered || isMobileOpen ? 280 : 88,
-          x: isMounted && (isMobileOpen || window.innerWidth >= 1024) ? 0 : -280
+          x: isMobileOpen || isDesktop ? 0 : -280
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -244,7 +235,7 @@ export function Sidebar() {
                         try {
                           await api.logout();
                         } finally {
-                          window.location.href = '/auth';
+                          router.replace('/auth');
                         }
                       }}
                       className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors rounded-xl flex-shrink-0"

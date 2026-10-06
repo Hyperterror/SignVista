@@ -76,6 +76,7 @@ export function TabbedLearningPanel({ activeTab, onTabChange, dictionary, progre
                         {activeTab === "dictionary" && <DictionaryPanel words={dictionary} onPractice={onPractice} />}
                         {activeTab === "practice" && (
                             <PracticePanel
+                                key={practiceWord ?? ''}
                                 vocabulary={vocabulary}
                                 progress={progress}
                                 dictionary={dictionary}

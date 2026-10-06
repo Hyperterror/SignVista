@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { Users, MessageCircle, Heart, Share2, Plus, Globe, ShieldCheck, X, Send } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '../utils/api';
+import { formatRelative, useNow } from '../utils/time';
 import { toast } from 'sonner';
 
 interface Comment {
@@ -52,22 +53,7 @@ export default function CommunityPage() {
     const [openComments, setOpenComments] = useState<Record<string, Comment[] | undefined>>({});
     const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
-    const fetchData = async () => {
-        try {
-            setIsLoading(true);
-            const [feedData, usersData] = await Promise.all([
-                api.getCommunityFeed(0, PAGE_SIZE),
-                api.getActiveUsers()
-            ]);
-            setPosts(feedData.posts);
-            setHasMore(feedData.has_more);
-            setActiveUsers(usersData.users);
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to sync with community');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const now = useNow();
 
     const loadMore = async () => {
         try {
@@ -83,11 +69,23 @@ export default function CommunityPage() {
     };
 
     useEffect(() => {
-        fetchData();
+        let ignore = false;
+        Promise.all([api.getCommunityFeed(0, PAGE_SIZE), api.getActiveUsers()])
+            .then(([feedData, usersData]) => {
+                if (ignore) return;
+                setPosts(feedData.posts);
+                setHasMore(feedData.has_more);
+                setActiveUsers(usersData.users);
+            })
+            .catch((error: any) => { if (!ignore) toast.error(error.message || 'Failed to sync with community'); })
+            .finally(() => { if (!ignore) setIsLoading(false); });
         const interval = setInterval(() => {
             api.getActiveUsers().then(data => setActiveUsers(data.users)).catch(() => { });
         }, 30000);
-        return () => clearInterval(interval);
+        return () => {
+            ignore = true;
+            clearInterval(interval);
+        };
     }, []);
 
     useEffect(() => {
@@ -186,13 +184,7 @@ export default function CommunityPage() {
         (activeTab === 'feed' || p.liked_by_me) && (!tagFilter || (p.tags || []).includes(tagFilter))
     );
 
-    const formatTime = (timestamp: number) => {
-        const diff = Date.now() / 1000 - timestamp;
-        if (diff < 60) return 'Just now';
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return `${Math.floor(diff / 86400)}d ago`;
-    };
+    const formatTime = (timestamp: number) => formatRelative(timestamp, now);
 
     return (
         <div className="min-h-screen p-6 md:p-12 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">

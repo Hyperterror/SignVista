@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Search, Send, Plus, ChevronLeft, Sparkles } from 'lucide-react';
 import { api } from '../utils/api';
+import { nowSeconds } from '../utils/time';
 import SignToolbox from '../components/chat/SignToolbox';
 import { toast } from 'sonner';
-import gsap from 'gsap';
 
 interface Contact {
     id: string;
@@ -44,31 +44,37 @@ export default function ChatPage() {
         selectedRef.current = selectedContact;
     }, [selectedContact]);
 
-    const loadContacts = async (selectId?: string, selectName?: string) => {
-        try {
-            const data: Contact[] = await api.getContacts();
-            let list = data;
-            if (selectId && !data.some((c) => c.id === selectId)) {
-                list = [{ id: selectId, name: selectName || 'New chat', status: 'offline', last_message: '', last_message_time: Date.now() / 1000 }, ...data];
-            }
-            setContacts(list);
-            setSelectedContact((current) => {
-                if (selectId) return list.find((c) => c.id === selectId) || current;
-                return current ?? list[0] ?? null;
-            });
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to load contacts');
-        } finally {
-            setIsLoading(false);
+    const applyContacts = (data: Contact[], selectId?: string, selectName?: string) => {
+        let list = data;
+        if (selectId && !data.some((c) => c.id === selectId)) {
+            list = [{ id: selectId, name: selectName || 'New chat', status: 'offline', last_message: '', last_message_time: nowSeconds() }, ...data];
         }
+        setContacts(list);
+        setSelectedContact((current) => {
+            if (selectId) return list.find((c) => c.id === selectId) || current;
+            return current ?? list[0] ?? null;
+        });
     };
+
+    const loadContacts = () => {
+        api.getContacts()
+            .then((data: Contact[]) => applyContacts(data))
+            .catch((error: any) => toast.error(error.message || 'Failed to load contacts'));
+    };
+
+    // Called from the socket handler when a message arrives from a new contact
+    const onUnknownContact = useEffectEvent(() => loadContacts());
 
     // Initial load (supports /chat?to=<userId>&name=<name> from the community page)
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        api.ensureSessionId().then(setSessionId).catch(() => { });
-        loadContacts(params.get('to') || undefined, params.get('name') || undefined);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        let ignore = false;
+        api.ensureSessionId().then((id) => { if (!ignore) setSessionId(id); }).catch(() => { });
+        api.getContacts()
+            .then((data: Contact[]) => { if (!ignore) applyContacts(data, params.get('to') || undefined, params.get('name') || undefined); })
+            .catch((error: any) => { if (!ignore) toast.error(error.message || 'Failed to load contacts'); })
+            .finally(() => { if (!ignore) setIsLoading(false); });
+        return () => { ignore = true; };
     }, []);
 
     // Authenticated WebSocket with reconnect
@@ -111,7 +117,7 @@ export default function ChatPage() {
                     const otherId = msg.sender_id === api.getSessionId() ? msg.receiver_id : msg.sender_id;
                     const existing = prev.find((c) => c.id === otherId);
                     if (!existing) {
-                        loadContacts();
+                        onUnknownContact();
                         return prev;
                     }
                     const updated = {
@@ -139,22 +145,22 @@ export default function ChatPage() {
             ws.current = null;
             if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) socket.close();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Load history whenever the conversation changes
+    const selectedId = selectedContact?.id;
     useEffect(() => {
-        if (!selectedContact) {
-            setMessages([]);
-            return;
-        }
+        if (!selectedId) return;
         let cancelled = false;
-        api.getChatMessages(selectedContact.id)
-            .then((data: ChatMessage[]) => { if (!cancelled) setMessages(data); })
+        api.getChatMessages(selectedId)
+            .then((data: ChatMessage[]) => {
+                if (cancelled) return;
+                setMessages(data);
+                setContacts((prev) => prev.map((c) => (c.id === selectedId ? { ...c, unread_count: 0 } : c)));
+            })
             .catch((e: any) => { if (!cancelled) toast.error(e.message || 'Failed to load messages'); });
-        setContacts((prev) => prev.map((c) => (c.id === selectedContact.id ? { ...c, unread_count: 0 } : c)));
         return () => { cancelled = true; };
-    }, [selectedContact?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [selectedId]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -177,7 +183,7 @@ export default function ChatPage() {
             setSelectedContact(existing);
             return;
         }
-        const contact: Contact = { id: userId, name, status: 'online', last_message: '', last_message_time: Date.now() / 1000 };
+        const contact: Contact = { id: userId, name, status: 'online', last_message: '', last_message_time: nowSeconds() };
         setContacts((prev) => [contact, ...prev]);
         setSelectedContact(contact);
     };

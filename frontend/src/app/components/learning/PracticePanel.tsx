@@ -48,12 +48,13 @@ export function PracticePanel({
 
     useEffect(() => { targetRef.current = target; }, [target]);
 
+    // The parent remounts this panel (key) when a new word is requested
     useEffect(() => {
-        const w = findPracticable(initialWord);
-        if (w) setTarget(w);
-        else if (initialWord) toast.info(`"${prettyWord(initialWord)}" can't be practiced with the camera yet.`);
+        if (initialWord && !findPracticable(initialWord)) {
+            toast.info(`"${prettyWord(initialWord)}" can't be practiced with the camera yet.`);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialWord]);
+    }, []);
 
     const stop = () => {
         activeRef.current = false;

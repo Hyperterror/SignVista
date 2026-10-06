@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Check, CheckCircle2, AlertCircle, Info, Trophy, Trash2 } from 'lucide-react';
+import { Bell, Check, CheckCircle2, AlertCircle, Info, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '../utils/api';
-import { motion, AnimatePresence } from 'framer-motion';
+import { formatRelative, useNow } from '../utils/time';
+import { motion } from 'framer-motion';
 
 interface NotificationsDropdownProps {
     isOpen: boolean;
@@ -14,26 +15,10 @@ interface NotificationsDropdownProps {
 
 export function NotificationsDropdown({ isOpen, onClose, onUnreadChange }: NotificationsDropdownProps) {
     const router = useRouter();
+    const now = useNow();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
-    useEffect(() => {
-        if (isOpen) {
-            fetchNotifications();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen]);
-
-    const fetchNotifications = async () => {
-        try {
-            const res = await api.getNotifications();
-            setNotifications(res.notifications);
-            setUnreadCount(res.unread_count);
-            onUnreadChange?.(res.unread_count);
-        } catch (e) {
-            console.error("Failed to load notifications", e);
-        }
-    };
 
     const markAllRead = async () => {
         try {
@@ -55,18 +40,27 @@ export function NotificationsDropdown({ isOpen, onClose, onUnreadChange }: Notif
                 onUnreadChange?.(next);
                 return next;
             });
-        } catch (e) { }
+        } catch {
+            // non-critical; the badge refreshes on next open
+        }
     };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let ignore = false;
+        api.getNotifications()
+            .then((res) => {
+                if (ignore) return;
+                setNotifications(res.notifications);
+                setUnreadCount(res.unread_count);
+                onUnreadChange?.(res.unread_count);
+            })
+            .catch((e) => console.error('Failed to load notifications', e));
+        return () => { ignore = true; };
+    }, [isOpen, onUnreadChange]);
 
     if (!isOpen) return null;
 
-    const parseTime = (timestamp: number) => {
-        const diff = (Date.now() / 1000) - timestamp;
-        if (diff < 60) return `Just now`;
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return `${Math.floor(diff / 86400)}d ago`;
-    };
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -132,7 +126,7 @@ export function NotificationsDropdown({ isOpen, onClose, onUnreadChange }: Notif
                                         {n.title}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1 leading-snug">{n.message}</p>
-                                    <p className="text-[10px] text-gray-400 mt-2 font-medium">{parseTime(n.timestamp)}</p>
+                                    <p className="text-[10px] text-gray-400 mt-2 font-medium">{formatRelative(n.timestamp, now)}</p>
                                 </div>
                                 {!n.is_read && (
                                     <div className="shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5" />

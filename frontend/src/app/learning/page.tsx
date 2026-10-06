@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import gsap from 'gsap';
 import { toast } from 'sonner';
 import { StatsDashboard } from '../components/learning/StatsDashboard';
@@ -8,14 +9,16 @@ import { LearningTab, TabbedLearningPanel } from '../components/learning/TabbedL
 import { api } from '../utils/api';
 import { DictionaryWord, ProgressWord, VocabularyWord } from './types';
 
-export default function LearningPage() {
+function LearningHub() {
+    // Deep link from the dashboard/dictionary: /learning?practice=<word>
+    const initialPractice = useSearchParams().get('practice');
     const [dictionary, setDictionary] = useState<DictionaryWord[]>([]);
     const [progress, setProgress] = useState<ProgressWord[]>([]);
     const [vocabulary, setVocabulary] = useState<VocabularyWord[]>([]);
     const [stats, setStats] = useState({ totalWords: 0, practiced: 0, proficiency: 0, streak: 0 });
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<LearningTab>('dictionary');
-    const [practiceWord, setPracticeWord] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<LearningTab>(initialPractice ? 'practice' : 'dictionary');
+    const [practiceWord, setPracticeWord] = useState<string | null>(initialPractice);
     const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadProgress = useCallback(async () => {
@@ -30,13 +33,6 @@ export default function LearningPage() {
     }, []);
 
     useEffect(() => {
-        // Deep link from the dashboard: /learning?practice=<word>
-        const word = new URLSearchParams(window.location.search).get('practice');
-        if (word) {
-            setPracticeWord(word);
-            setActiveTab('practice');
-        }
-
         (async () => {
             try {
                 const [dict, vocab] = await Promise.all([api.getDictionary(), api.getVocabulary()]);
@@ -74,14 +70,7 @@ export default function LearningPage() {
         refreshTimer.current = setTimeout(() => { loadProgress().catch(() => { }); }, 800);
     };
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6">
-                <div className="w-16 h-16 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 font-medium">Crunching your progress...</p>
-            </div>
-        );
-    }
+    if (isLoading) return <LoadingState />;
 
     return (
         <div className="min-h-screen p-6 md:p-12 relative overflow-hidden bg-[#F8FAFA] dark:bg-[#0a0a0a] transition-colors duration-500 font-sans selection:bg-[#9ED5D1] selection:text-[#105F68]">
@@ -115,5 +104,22 @@ export default function LearningPage() {
                 />
             </div>
         </div>
+    );
+}
+
+function LoadingState() {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+            <div className="w-16 h-16 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-gray-600 dark:text-gray-400 font-medium">Crunching your progress...</p>
+        </div>
+    );
+}
+
+export default function LearningPage() {
+    return (
+        <Suspense fallback={<LoadingState />}>
+            <LearningHub />
+        </Suspense>
     );
 }

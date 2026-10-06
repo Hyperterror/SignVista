@@ -24,6 +24,8 @@ interface ARResponse {
     history: string[];
 }
 
+const MIN_FRAME_INTERVAL_MS = 66; // ~15 fps upper bound
+
 const prettyWord = (w: string) =>
     w.length <= 2 ? w.toUpperCase() : w.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -35,6 +37,87 @@ const statusHint = (status: string | undefined): string => {
     if (status === 'no_model' || status === 'landmarks_unavailable') return 'Sign recognition is unavailable right now';
     return 'Listening for signs...';
 };
+
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+function drawAROverlay(canvas: HTMLCanvasElement | null, video: HTMLVideoElement | null, data: ARResponse) {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (video && video.videoWidth && (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const { width, height } = canvas;
+
+    // Draw Hands
+    const drawHand = (landmarks: Landmark[], color: string) => {
+        if (!landmarks.length) return;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 3;
+
+        // Draw connections
+        const connections = [
+            [0, 1, 2, 3, 4], // Thumb
+            [0, 5, 6, 7, 8], // Index
+            [0, 9, 10, 11, 12], // Middle
+            [0, 13, 14, 15, 16], // Ring
+            [0, 17, 18, 19, 20], // Pinky
+            [5, 9, 13, 17], // Palm base
+        ];
+
+        connections.forEach(path => {
+            ctx.beginPath();
+            path.forEach((idx, i) => {
+                const pt = landmarks[idx];
+                if (i === 0) ctx.moveTo(pt.x * width, pt.y * height);
+                else ctx.lineTo(pt.x * width, pt.y * height);
+            });
+            ctx.stroke();
+        });
+
+        // Draw points
+        landmarks.forEach(pt => {
+            ctx.beginPath();
+            ctx.arc(pt.x * width, pt.y * height, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    };
+
+    drawHand(data.left_hand_landmarks, '#63C1BB');
+    drawHand(data.right_hand_landmarks, '#C8E6E2');
+
+    // Draw Pose Skeleton (simplified)
+    if (data.pose_landmarks.length) {
+        ctx.strokeStyle = 'rgba(16, 95, 104, 0.5)';
+        ctx.lineWidth = 2;
+
+        // Draw shoulder to shoulder
+        ctx.beginPath();
+        ctx.moveTo(data.pose_landmarks[11].x * width, data.pose_landmarks[11].y * height);
+        ctx.lineTo(data.pose_landmarks[12].x * width, data.pose_landmarks[12].y * height);
+        ctx.stroke();
+
+        // Draw arms
+        [[11, 13, 15], [12, 14, 16]].forEach(arm => {
+            ctx.beginPath();
+            arm.forEach((idx, i) => {
+                const pt = data.pose_landmarks[idx];
+                if (i === 0) ctx.moveTo(pt.x * width, pt.y * height);
+                else ctx.lineTo(pt.x * width, pt.y * height);
+            });
+            ctx.stroke();
+        });
+    }
+}
 
 export default function ARRecognizePage() {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -94,7 +177,7 @@ export default function ARRecognizePage() {
                 setIsActive(true);
                 toast.success('Camera initialized');
             }
-        } catch (err) {
+        } catch {
             toast.error('Failed to access camera. Please grant permissions.');
         }
     };
@@ -120,37 +203,38 @@ export default function ARRecognizePage() {
     const frameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const sentAtRef = useRef(0);
-    const MIN_FRAME_INTERVAL_MS = 66; // ~15 fps upper bound
-
-    const sendFrame = () => {
-        const ws = wsRef.current;
-        const video = videoRef.current;
-        if (!activeRef.current || !ws || ws.readyState !== WebSocket.OPEN || !video) return;
-        if (video.readyState < 2 || !video.videoWidth) {
-            frameTimerRef.current = setTimeout(sendFrame, 100);
-            return;
-        }
-        const canvas = captureCanvasRef.current ?? (captureCanvasRef.current = document.createElement('canvas'));
-        canvas.width = 640;
-        canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        sentAtRef.current = performance.now();
-        ws.send(JSON.stringify({
-            frame: canvas.toDataURL('image/jpeg', 0.7),
-            ar: isARModeRef.current,
-        }));
-    };
-
-    const scheduleNextFrame = () => {
-        const elapsed = performance.now() - sentAtRef.current;
-        frameTimerRef.current = setTimeout(sendFrame, Math.max(0, MIN_FRAME_INTERVAL_MS - elapsed));
-    };
 
     useEffect(() => {
         if (!isActive) return;
         activeRef.current = true;
+        const overlayCanvas = canvasRef.current;
+
+        const sendFrame = () => {
+            const ws = wsRef.current;
+            const video = videoRef.current;
+            if (!activeRef.current || !ws || ws.readyState !== WebSocket.OPEN || !video) return;
+            if (video.readyState < 2 || !video.videoWidth) {
+                frameTimerRef.current = setTimeout(sendFrame, 100);
+                return;
+            }
+            const canvas = captureCanvasRef.current ?? (captureCanvasRef.current = document.createElement('canvas'));
+            canvas.width = 640;
+            canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            sentAtRef.current = performance.now();
+            ws.send(JSON.stringify({
+                frame: canvas.toDataURL('image/jpeg', 0.7),
+                ar: isARModeRef.current,
+            }));
+        };
+
+        const scheduleNextFrame = () => {
+            const elapsed = performance.now() - sentAtRef.current;
+            frameTimerRef.current = setTimeout(sendFrame, Math.max(0, MIN_FRAME_INTERVAL_MS - elapsed));
+        };
+
         let retries = 0;
         let closedByUs = false;
 
@@ -199,9 +283,9 @@ export default function ARRecognizePage() {
                     }
 
                     if (isARModeRef.current && data.pose_landmarks) {
-                        drawAROverlay(data as ARResponse);
+                        drawAROverlay(canvasRef.current, videoRef.current, data as ARResponse);
                     } else {
-                        clearCanvas();
+                        clearCanvas(canvasRef.current);
                     }
                 }
                 scheduleNextFrame();
@@ -233,95 +317,9 @@ export default function ARRecognizePage() {
             const ws = wsRef.current;
             wsRef.current = null;
             if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) ws.close();
-            clearCanvas();
+            clearCanvas(overlayCanvas);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive]);
-
-    const clearCanvas = () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-    };
-
-    const drawAROverlay = (data: ARResponse) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const video = videoRef.current;
-        if (video && video.videoWidth && (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-        }
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const { width, height } = canvas;
-
-        // Draw Hands
-        const drawHand = (landmarks: Landmark[], color: string) => {
-            if (!landmarks.length) return;
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = 3;
-
-            // Draw connections
-            const connections = [
-                [0, 1, 2, 3, 4], // Thumb
-                [0, 5, 6, 7, 8], // Index
-                [0, 9, 10, 11, 12], // Middle
-                [0, 13, 14, 15, 16], // Ring
-                [0, 17, 18, 19, 20], // Pinky
-                [5, 9, 13, 17], // Palm base
-            ];
-
-            connections.forEach(path => {
-                ctx.beginPath();
-                path.forEach((idx, i) => {
-                    const pt = landmarks[idx];
-                    if (i === 0) ctx.moveTo(pt.x * width, pt.y * height);
-                    else ctx.lineTo(pt.x * width, pt.y * height);
-                });
-                ctx.stroke();
-            });
-
-            // Draw points
-            landmarks.forEach(pt => {
-                ctx.beginPath();
-                ctx.arc(pt.x * width, pt.y * height, 4, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        };
-
-        drawHand(data.left_hand_landmarks, '#63C1BB');
-        drawHand(data.right_hand_landmarks, '#C8E6E2');
-
-        // Draw Pose Skeleton (simplified)
-        if (data.pose_landmarks.length) {
-            ctx.strokeStyle = 'rgba(16, 95, 104, 0.5)';
-            ctx.lineWidth = 2;
-            const poseIdx = [11, 12, 13, 14, 15, 16, 23, 24]; // Shoulders, elbows, wrists, hips
-
-            // Draw shoulder to shoulder
-            ctx.beginPath();
-            ctx.moveTo(data.pose_landmarks[11].x * width, data.pose_landmarks[11].y * height);
-            ctx.lineTo(data.pose_landmarks[12].x * width, data.pose_landmarks[12].y * height);
-            ctx.stroke();
-
-            // Draw arms
-            [[11, 13, 15], [12, 14, 16]].forEach(arm => {
-                ctx.beginPath();
-                arm.forEach((idx, i) => {
-                    const pt = data.pose_landmarks[idx];
-                    if (i === 0) ctx.moveTo(pt.x * width, pt.y * height);
-                    else ctx.lineTo(pt.x * width, pt.y * height);
-                });
-                ctx.stroke();
-            });
-        }
-    };
 
     return (
         <div className="min-h-screen p-6 md:p-12 overflow-hidden">

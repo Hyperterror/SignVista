@@ -34,31 +34,27 @@ export default function ProfilePage() {
     });
 
     useEffect(() => {
-        loadProfile();
+        let ignore = false;
+        Promise.all([
+            api.getMe(true),
+            api.getAchievements().catch(() => null),
+            api.getDashboard().catch(() => null),
+        ])
+            .then(([res, ach, dash]) => {
+                if (ignore) return;
+                if (ach) setAchievements(ach.achievements);
+                if (dash) setLevelInfo(dash.xp_info);
+                setFormData({
+                    name: res.name || '',
+                    email: res.email || '',
+                    phone: res.phone || '',
+                    preferred_language: res.preferred_language || 'en',
+                });
+            })
+            .catch(() => { if (!ignore) toast.error('Failed to load profile'); })
+            .finally(() => { if (!ignore) setIsLoading(false); });
+        return () => { ignore = true; };
     }, []);
-
-    const loadProfile = async () => {
-        setIsLoading(true);
-        try {
-            const [res, ach, dash] = await Promise.all([
-                api.getMe(true),
-                api.getAchievements().catch(() => null),
-                api.getDashboard().catch(() => null),
-            ]);
-            if (ach) setAchievements(ach.achievements);
-            if (dash) setLevelInfo(dash.xp_info);
-            setFormData({
-                name: res.name || '',
-                email: res.email || '',
-                phone: res.phone || '',
-                preferred_language: res.preferred_language || 'en'
-            });
-        } catch (e) {
-            toast.error("Failed to load profile");
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();

@@ -5,7 +5,7 @@ translation from the webcam, text/voice → sign lookup, camera-based practice
 with proficiency tracking, a timed sign game, and a small community with chat.
 
 ```text
-frontend/              Next.js 15 app (App Router, Tailwind)
+frontend/              Next.js 16 app (App Router, React 19, Tailwind)
 backend/               FastAPI API, SQLite, ML inference
 ISL-Unified-Project/   Pretrained models + original training code
 ```
@@ -68,7 +68,7 @@ from `backend/static/assets`.
 
 ```bash
 cd backend && venv\Scripts\python -m pytest tests     # isolated temp database
-cd frontend && npm run lint && npx tsc --noEmit && npm run build
+cd frontend && npm run lint && npm run typecheck && npm run build
 ```
 
 ## Known gaps (need content or models, not code)

@@ -75,16 +75,6 @@ export default function VoiceToSignPage() {
         if (recognitionRef.current) recognitionRef.current.lang = speechLang;
     }, [speechLang]);
 
-    useEffect(() => {
-        if (isRecording && glowRef.current) {
-            gsap.to(glowRef.current, { opacity: 1, scale: 1.1, duration: 1, ease: 'power1.inOut', yoyo: true, repeat: -1 });
-            const interval = setInterval(() => createParticle(), 200);
-            return () => clearInterval(interval);
-        } else if (glowRef.current) {
-            gsap.to(glowRef.current, { opacity: 0, scale: 1, duration: 0.5 });
-        }
-    }, [isRecording]);
-
     const createParticle = () => {
         if (!micRef.current) return;
         const particle = document.createElement('div');
@@ -102,6 +92,16 @@ export default function VoiceToSignPage() {
             { x: Math.cos(angle) * distance - startX, y: Math.sin(angle) * distance - startY, opacity: 0, scale: 0, duration: 1.5, ease: 'power2.out', onComplete: () => particle.remove() }
         );
     };
+
+    useEffect(() => {
+        if (isRecording && glowRef.current) {
+            gsap.to(glowRef.current, { opacity: 1, scale: 1.1, duration: 1, ease: 'power1.inOut', yoyo: true, repeat: -1 });
+            const interval = setInterval(() => createParticle(), 200);
+            return () => clearInterval(interval);
+        } else if (glowRef.current) {
+            gsap.to(glowRef.current, { opacity: 0, scale: 1, duration: 0.5 });
+        }
+    }, [isRecording]);
 
     const toggleRecording = () => {
         if (isRecording) {
@@ -158,7 +158,7 @@ export default function VoiceToSignPage() {
                 } else {
                     toast.warning('No matching ISL signs found');
                 }
-            } catch (error) {
+            } catch {
                 toast.error('Translation failed');
             }
         }
