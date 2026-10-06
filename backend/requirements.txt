@@ -16,7 +16,11 @@ passlib~=1.7.4          # only to verify legacy sha256_crypt hashes (upgraded to
 SQLAlchemy~=2.0.46
 alembic~=1.20
 
-# ML — mediapipe brings in opencv-contrib-python (provides cv2)
+# ML
 numpy~=2.4
+# Pinned below 5: OpenCV 5 removed cv2.dnn.readNetFromDarknet (YOLO hand detector).
+# Use the contrib build only — mediapipe depends on it, and installing a second
+# OpenCV package (e.g. opencv-python-headless) overwrites the same cv2 files.
+opencv-contrib-python>=4.13,<5
 mediapipe==0.10.32      # Tasks API (PoseLandmarker/HandLandmarker); mp.solutions is gone
 tensorflow~=2.20.0
