@@ -20,6 +20,7 @@ import numpy as np
 
 from ..buffer_manager import KEYPOINT_DIM, clear_buffer, get_buffer
 from ..keypoint_extractor import extract_keypoints
+from ..predictor import make_predictor
 from ..vocabulary import get_display_name, get_word_by_module_index
 from . import ModulePrediction
 
@@ -53,6 +54,7 @@ class RecognitionModule:
         # Minimum share of buffered frames that must contain a hand before predicting
         self.min_hand_ratio = preprocessing_params.get("min_hand_ratio", 0.3)
         self._model_lock = threading.Lock()
+        self._predict = make_predictor(model, (self.buffer_size, KEYPOINT_DIM))
         
         logger.info(
             f"✅ Recognition module initialized "
@@ -116,7 +118,7 @@ class RecognitionModule:
             # Run inference
             inference_start = time.time()
             with self._model_lock:
-                predictions = self.model.predict(sequence, verbose=0)
+                predictions = self._predict(sequence)
             inference_time = time.time() - inference_start
             
             # Get class with highest confidence

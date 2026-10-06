@@ -38,6 +38,15 @@ when retraining models.
 Learn and game routes ignore letter/digit predictions while the target is a
 word-level sign, and start a fresh buffer after each recorded attempt.
 
+## Performance
+
+Models run through `ml/predictor.py`, which compiles them with `tf.function`
+using a fixed input signature. `model.predict()` costs 50–75 ms per call
+because of its batch-oriented overhead; the compiled path takes about 6 ms
+for the LSTM and under 1 ms for the classifier, with identical outputs.
+A frame costs about 25 ms of MediaPipe landmarking plus a few milliseconds
+of inference on a laptop CPU.
+
 ## Models
 
 | Module | File | Notes |

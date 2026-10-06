@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from ..keypoint_extractor import FrameLandmarks, extract_landmarks
+from ..predictor import make_predictor
 from ..vocabulary import get_display_name, get_word_by_module_index
 from . import ModulePrediction
 
@@ -50,6 +51,7 @@ class DetectionModule:
         self._history: "OrderedDict[str, List[str]]" = OrderedDict()
         self._history_lock = threading.Lock()
         self._model_lock = threading.Lock()
+        self._predict = make_predictor(model, (42,))
 
         logger.info(
             f"✅ Detection module initialized (threshold={self.confidence_threshold}, "
@@ -138,7 +140,7 @@ class DetectionModule:
 
             inference_start = time.time()
             with self._model_lock:
-                probs = np.asarray(self.model.predict(batch, verbose=0))
+                probs = self._predict(batch)
             inference_time = time.time() - inference_start
 
             # Pick the hand whose top prediction is most confident

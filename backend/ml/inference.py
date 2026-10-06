@@ -153,9 +153,9 @@ def warmup() -> None:
         frame = np.full((480, 640, 3), 127, dtype=np.uint8)
         extract_landmarks(frame)
         if _recognition_module is not None:
-            _recognition_module.model.predict(np.zeros((1, _recognition_module.buffer_size, 258), np.float32), verbose=0)
+            _recognition_module._predict(np.zeros((1, _recognition_module.buffer_size, 258), np.float32))
         if _detection_module is not None:
-            _detection_module.model.predict(np.zeros((1, 42), np.float32), verbose=0)
+            _detection_module._predict(np.zeros((1, 42), np.float32))
         logger.info(f"🔥 ML pipeline warmed up in {time.time() - t:.1f}s")
     except Exception as e:
         logger.warning(f"Warm-up failed (non-fatal): {e}")
