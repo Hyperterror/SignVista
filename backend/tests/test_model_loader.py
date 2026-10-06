@@ -216,7 +216,11 @@ class TestModelLoaderUnit:
         assert status["gpu_available"] is False
 
 
+from app.config import REPO_ROOT
 from app.config import settings as _settings
+
+YOLO_DIR = os.path.join(str(REPO_ROOT), "ISL-Unified-Project", "config", "yolo")
+
 
 MODELS_DIR = _settings.ISL_MODELS_DIR
 
@@ -275,8 +279,8 @@ class TestModelLoaderIntegration:
             assert info["type"] == "SqueezeNet"
     
     @pytest.mark.skipif(
-        not (os.path.exists("ISL-Unified-Project/config/yolo/cross-hands.cfg") and
-             os.path.exists("ISL-Unified-Project/config/yolo/cross-hands.weights")),
+        not (os.path.exists(os.path.join(YOLO_DIR, "cross-hands.cfg")) and
+             os.path.exists(os.path.join(YOLO_DIR, "cross-hands.weights"))),
         reason="YOLO config or weights not available"
     )
     def test_load_yolo_detector_real(self, model_loader):

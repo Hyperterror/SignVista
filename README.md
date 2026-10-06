@@ -19,7 +19,7 @@ Browser ──HTTP /api/*──▶ Next.js (proxy) ──▶ FastAPI ──▶ S
                                                     MediaPipe Pose + Hands
                                                     ├─ Recognition: 45-frame LSTM (hello / how are you / thank you)
                                                     ├─ Detection: per-frame classifier (A–Z, 1–9)
-                                                    └─ Translation: YOLO + SqueezeNet (disabled, weights not in repo)
+                                                    └─ Translation: YOLO + SqueezeNet (optional, off by default)
 ```
 
 - **Auth**: phone + password. The session is an HttpOnly cookie. Because the
@@ -103,8 +103,10 @@ instance (sticky sessions), or switch to a shared store.
   *how are you* and *thank you*, plus static letters and digits. Other
   dictionary words can be studied but not practiced with the camera until
   models are trained for them.
-- **Translation module** needs `ISL-Unified-Project/config/yolo/cross-hands.weights`
-  (not in the repo) before it can be enabled in `backend/config/isl_modules.json`.
+- **Translation module** (YOLO + SqueezeNet) works but is off by default: it
+  costs ~360 ms per frame on CPU and its letters are already covered by the
+  detection model. Its 246 MB weights aren't in git; fetch them with
+  `cd backend && python scripts/download_models.py`.
 
 ## License
 

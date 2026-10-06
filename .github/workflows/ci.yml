@@ -36,6 +36,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Cache large model files
+        uses: actions/cache@v4
+        with:
+          path: ISL-Unified-Project/config/yolo/cross-hands.weights
+          key: yolo-cross-hands-f5a96b1c
+
+      - name: Download large model files
+        run: python scripts/download_models.py
+
       - name: Ruff
         run: ruff check .
 

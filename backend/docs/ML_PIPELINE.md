@@ -27,8 +27,11 @@ when retraining models.
      absolute value. This matches `detection/isl_detection.py`, the training
      code. It rejects ambiguous results (top-2 margin < 0.15) and requires the
      same answer on 2 consecutive frames per session. Classes: 1–9, A–Z.
-   - **Translation**: YOLO + SqueezeNet. Disabled because
-     `cross-hands.weights` isn't in the repo.
+   - **Translation**: YOLO hand detector + SqueezeNet (10 letters). Works, but
+     **disabled by default**: it costs ~360 ms per frame on CPU and its letters
+     are already covered by Detection. Enable it in `config/isl_modules.json`
+     only with a GPU. It needs `cross-hands.weights` (246 MB, too large for
+     git); fetch it with `python scripts/download_models.py`.
 4. **Selection.** Predictions above each module's threshold are combined with
    `prediction_strategy` (priority, highest_confidence or voting).
    Recognition has priority 1.
@@ -53,7 +56,7 @@ of inference on a laptop CPU.
 | ------ | ---- | ----- |
 | Recognition | `ISL-Unified-Project/models/recognition/lstm_word_model.hdf5` | **Weights only.** Architecture is rebuilt in `model_loader.build_recognition_model` (LSTM 64→128→256→64, Dense 64→32→3, relu). |
 | Detection | `ISL-Unified-Project/models/detection/gesture_classifier.h5` | Full Keras model, input (1, 42). |
-| Translation | `ISL-Unified-Project/models/translation/squeezenet_model` | Needs YOLO weights to run. |
+| Translation | `ISL-Unified-Project/models/translation/squeezenet_model` | Keras 2.2.4 HDF5 without extension; rebuilt from its stored config (`model_loader.load_keras_file`). Needs YOLO weights. |
 
 Optional: a standalone full Keras model at `MODEL_PATH` is used only when the
 recognition module isn't available.

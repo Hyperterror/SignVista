@@ -10,10 +10,14 @@ import os
 import numpy as np
 import pytest
 
+from app.config import REPO_ROOT
 from ml.config_manager import ConfigurationManager
 from ml.model_loader import ModelLoader
 from ml.modules import ModulePrediction
 from ml.modules.translation import TranslationModule
+
+YOLO_DIR = os.path.join(str(REPO_ROOT), "ISL-Unified-Project", "config", "yolo")
+
 
 
 @pytest.fixture
@@ -40,8 +44,8 @@ def translation_model(model_loader):
 @pytest.fixture
 def yolo_paths():
     """Get YOLO configuration and weights paths."""
-    config_path = "ISL-Unified-Project/config/yolo/cross-hands.cfg"
-    weights_path = "ISL-Unified-Project/config/yolo/cross-hands.weights"
+    config_path = os.path.join(YOLO_DIR, "cross-hands.cfg")
+    weights_path = os.path.join(YOLO_DIR, "cross-hands.weights")
     
     if not os.path.exists(config_path):
         pytest.skip(f"YOLO config not found: {config_path}")

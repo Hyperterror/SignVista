@@ -56,3 +56,4 @@ build_output.log
 
 # Stray directories created by old relative paths
 backend/backend/
+ISL-Unified-Project/config/yolo/*.weights

@@ -36,6 +36,79 @@ def _import_cv2():
     return _cv2
 
 
+HDF5_MAGIC = b"\x89HDF\r\n\x1a\n"
+
+
+_INITIALIZERS = {
+    "GlorotUniform", "GlorotNormal", "Zeros", "Ones", "Constant", "RandomNormal", "RandomUniform",
+    "TruncatedNormal", "HeNormal", "HeUniform", "LecunNormal", "LecunUniform", "VarianceScaling", "Orthogonal",
+}
+
+
+def _modernize_keras2_config(obj) -> None:
+    """In-place: drop Keras 2 initializer `dtype` args and rename `batch_input_shape`."""
+    if isinstance(obj, dict):
+        if obj.get("class_name") in _INITIALIZERS and isinstance(obj.get("config"), dict):
+            obj["config"].pop("dtype", None)
+        if "batch_input_shape" in obj:
+            obj["batch_shape"] = obj.pop("batch_input_shape")
+        for value in obj.values():
+            _modernize_keras2_config(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            _modernize_keras2_config(value)
+
+
+def _load_legacy_keras2_h5(h5_path: str):
+    """Rebuild a Keras 2.x functional model from its stored config and load its weights."""
+    import json
+
+    import h5py
+
+    tf = _import_tensorflow()
+    with h5py.File(h5_path, "r") as f:
+        cfg = json.loads(f.attrs["model_config"])
+    _modernize_keras2_config(cfg)
+    model = tf.keras.Model.from_config(cfg["config"])
+    model.load_weights(h5_path)
+    return model
+
+
+def load_keras_file(path: str):
+    """
+    Load a full Keras model file, including legacy cases Keras 3 rejects:
+    - HDF5 models saved without an ".h5" extension (Keras 3 dispatches on the
+      extension), e.g. the translation `squeezenet_model`
+    - models saved by Keras 2.x whose configs use arguments Keras 3 removed
+    """
+    import shutil
+    import tempfile
+
+    tf = _import_tensorflow()
+    with open(path, "rb") as fh:
+        is_hdf5 = fh.read(8) == HDF5_MAGIC
+
+    if not is_hdf5:
+        return tf.keras.models.load_model(path, compile=False)
+
+    tmp = None
+    h5_path = path
+    if not path.lower().endswith((".h5", ".hdf5")):
+        fd, tmp = tempfile.mkstemp(suffix=".h5")
+        os.close(fd)
+        shutil.copyfile(path, tmp)
+        h5_path = tmp
+    try:
+        try:
+            return tf.keras.models.load_model(h5_path, compile=False)
+        except (TypeError, ValueError) as e:
+            logger.info(f"Standard load failed ({type(e).__name__}); rebuilding legacy Keras 2 model")
+            return _load_legacy_keras2_h5(h5_path)
+    finally:
+        if tmp:
+            os.remove(tmp)
+
+
 def build_recognition_model(num_classes: int = 3, seq_len: int = 45, features: int = 258):
     """Word-level LSTM architecture exactly as trained in the ISL Unified Project."""
     tf = _import_tensorflow()
@@ -210,13 +283,13 @@ class ModelLoader:
             return None
         
         try:
-            tf = _import_tensorflow()
+            _import_tensorflow()
             
             # Check GPU availability
             self._check_gpu_availability()
             
             # Load SavedModel format
-            model = tf.keras.models.load_model(model_path, compile=False)
+            model = load_keras_file(model_path)
             
             # Validate model
             test_input = np.random.randn(1, 224, 224, 3).astype(np.float32)

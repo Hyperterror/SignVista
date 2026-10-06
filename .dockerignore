@@ -19,3 +19,4 @@ backend/.dev_secret_key
 backend/tests
 backend/scripts
 .vscode
+ISL-Unified-Project/config/yolo/*.weights
