@@ -86,6 +86,14 @@ cd backend && alembic revision --autogenerate -m "describe the change"
 
 `tests/test_migrations.py` fails if the models and migrations drift apart.
 
+## Scaling note
+
+The backend keeps per-user loop state (sessions, rate limits, chat sockets,
+frame buffers) in process memory, so run **one** uvicorn worker per instance
+(the Docker image does). Durable data is in the database. To scale out, move
+the rate limiter and chat fan-out to Redis and pin WebSocket clients to an
+instance (sticky sessions), or switch to a shared store.
+
 ## Known gaps (need content or models, not code)
 
 - **Sign demonstration GIFs** are not included. Add them under
