@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings as app_settings
-from app.migrations import ensure_schema
+from app.migrations import run_migrations
 from app.schemas import HealthResponse
 from app.session_store import get_active_session_count
 from ml.inference import (
@@ -53,8 +53,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Database: {app_settings.DATABASE_URL.split('///')[0]}///…")
     logger.info("=" * 60)
 
-    logger.info("📦 Ensuring database schema is up to date...")
-    ensure_schema()
+    logger.info("📦 Applying database migrations...")
+    run_migrations()
 
     initialize_model()
     initialize_isl_modules()
@@ -135,10 +135,26 @@ def health_check():
 
 # ─── Routers ──────────────────────────────────────────────────────
 
-from app.routes import translate, learn, game, stats, vocabulary  # noqa: E402
-from app.routes import profile, text_to_sign, ar, community, auth  # noqa: E402
-from app.routes import dictionary, progress, history, achievements, dashboard, chat  # noqa: E402
-from app.routes import notifications, settings as settings_router  # noqa: E402
+from app.routes import (  # noqa: E402  # noqa: E402  # noqa: E402  # noqa: E402
+    achievements,
+    ar,
+    auth,
+    chat,
+    community,
+    dashboard,
+    dictionary,
+    game,
+    history,
+    learn,
+    notifications,
+    profile,
+    progress,
+    stats,
+    text_to_sign,
+    translate,
+    vocabulary,
+)
+from app.routes import settings as settings_router
 
 for router_module in (
     auth, translate, learn, game, stats, vocabulary,

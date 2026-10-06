@@ -95,7 +95,7 @@ def update_profile(request: ProfileCreateRequest, current_user: dict = Depends(g
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Phone number already in use")
+        raise HTTPException(status_code=400, detail="Phone number already in use") from None
     db.refresh(user_obj)
     return _profile_response(user_obj)
 

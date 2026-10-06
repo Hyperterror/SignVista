@@ -182,7 +182,7 @@ def _assign_hands(pose: List[Point], hands: List[List[Point]], labels: List[str]
         return left, right
 
     # No pose: HandLandmarker labels assume a mirrored image; browser frames aren't mirrored
-    for hand, label in zip(hands, labels):
+    for hand, label in zip(hands, labels, strict=False):
         if label == "Right" and not left:
             left = hand
         elif label == "Left" and not right:

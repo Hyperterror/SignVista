@@ -8,10 +8,11 @@ Ayush: Use this for the browsable ISL dictionary.
        Supports filtering by category, difficulty, and search term.
 """
 
-from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, Set
 
-from app.schemas import DictionaryResponse, DictionaryEntry
+from fastapi import APIRouter, HTTPException, Query
+
+from app.schemas import DictionaryEntry, DictionaryResponse
 from ml.sign_demos import SIGN_DEMOS, media_url
 from ml.vocabulary import get_display_name
 

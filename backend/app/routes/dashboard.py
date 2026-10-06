@@ -8,11 +8,11 @@ Ayush: The ultimate personalized dashboard endpoint.
 """
 
 from fastapi import APIRouter, Depends
-from app.dependencies import get_current_user, require_own_session
 
-from app.schemas import DashboardResponse, XPLevelInfo, ActivityEvent
-from app.session_store import get_session, USER_LEVEL_THRESHOLDS, ACHIEVEMENT_DEFINITIONS
-from app.routes.history import format_activity_title, format_activity_desc
+from app.dependencies import get_current_user, require_own_session
+from app.routes.history import format_activity_desc, format_activity_title
+from app.schemas import ActivityEvent, DashboardResponse, XPLevelInfo
+from app.session_store import ACHIEVEMENT_DEFINITIONS, USER_LEVEL_THRESHOLDS, get_session
 from ml.inference import get_recognizable_words
 from ml.vocabulary import WORD_LIST
 

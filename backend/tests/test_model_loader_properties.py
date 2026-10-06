@@ -5,10 +5,12 @@ Uses hypothesis for property-based testing to verify universal properties
 across all inputs.
 """
 
-import pytest
-import numpy as np
-from hypothesis import given, strategies as st, settings
 from unittest.mock import Mock, patch
+
+import numpy as np
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from ml.model_loader import ModelLoader
 
 
@@ -78,7 +80,7 @@ class TestModelLoaderProperties:
         # Create mock model with correct output
         mock_model = Mock()
         expected_shape = output_shapes[module_name]
-        num_classes = expected_shape[1]
+        _num_classes = expected_shape[1]
         
         # Generate valid softmax output
         output = np.random.rand(*expected_shape)

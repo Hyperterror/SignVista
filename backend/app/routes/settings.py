@@ -7,13 +7,14 @@ PUT /api/settings
 Manages user application preferences in the SQLite database.
 """
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 import time
 
-from app.dependencies import get_current_user, require_own_session
-from app.database import get_db
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
 from app import models, schemas
+from app.database import get_db
+from app.dependencies import get_current_user, require_own_session
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 

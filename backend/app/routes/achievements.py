@@ -7,14 +7,13 @@ Ayush: Use this for the trophies/badges page.
 """
 
 from fastapi import APIRouter, Depends
-
-from app.schemas import AchievementsResponse, AchievementInfo
-from app.session_store import get_session, ACHIEVEMENT_DEFINITIONS
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_own_session
 from app.models import ActivityLog
+from app.schemas import AchievementInfo, AchievementsResponse
+from app.session_store import ACHIEVEMENT_DEFINITIONS, get_session
 
 router = APIRouter(prefix="/api/achievements", tags=["Achievements"])
 

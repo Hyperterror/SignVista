@@ -12,7 +12,6 @@ import json
 import os
 from typing import Dict, List, Optional
 
-
 # ─── Core Vocabulary (must match model training labels) ────────────
 
 VOCABULARY: List[Dict] = [
@@ -271,7 +270,7 @@ def get_unified_vocabulary() -> List[Dict]:
     
     # Collect all entries from all modules
     all_entries = []
-    for module_name, vocab in _MODULE_VOCABULARIES.items():
+    for _module_name, vocab in _MODULE_VOCABULARIES.items():
         all_entries.extend(vocab)
     
     # Sort by priority (lower number = higher priority)

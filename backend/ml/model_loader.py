@@ -5,9 +5,10 @@ This module handles discovery, loading, validation, and management of ML model i
 for the detection, recognition, and translation modules.
 """
 
-import os
 import logging
-from typing import Optional, Dict, Any, Tuple
+import os
+from typing import Any, Dict, Optional, Tuple
+
 import numpy as np
 
 logger = logging.getLogger(__name__)

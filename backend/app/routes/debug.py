@@ -28,7 +28,7 @@ def analyze_detection(request: RecognizeFrameRequest, current_user: Dict = Depen
     try:
         frame = decode_base64_frame(request.frame)
     except FrameDecodeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not validate_frame(frame):
         raise HTTPException(status_code=400, detail="Invalid frame")
     frame = resize_frame(frame, target_width=640)
@@ -46,7 +46,7 @@ def analyze_detection(request: RecognizeFrameRequest, current_user: Dict = Depen
         predictions = module.model.predict(module.preprocess_landmarks(features), verbose=0)[0]
     except Exception:
         logger.exception("Detection analysis failed")
-        raise HTTPException(status_code=500, detail="Detection analysis failed")
+        raise HTTPException(status_code=500, detail="Detection analysis failed") from None
 
     top_5 = [
         {

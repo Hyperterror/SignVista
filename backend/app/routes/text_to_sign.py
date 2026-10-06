@@ -18,10 +18,10 @@ from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 
 from app.schemas import (
+    SignDemoResponse,
+    SignWordData,
     TextToSignRequest,
     TextToSignResponse,
-    SignWordData,
-    SignDemoResponse,
 )
 from ml.sign_demos import SIGN_DEMOS, get_sign_demo
 from ml.vocabulary import get_display_name

@@ -22,7 +22,7 @@ from typing import Dict, Optional, Set
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_, and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
@@ -174,7 +174,7 @@ async def send_message(request: ChatSendRequest, current_user: Dict = Depends(ge
         payload = await run_in_threadpool(_store_message, current_user["user_id"], request.receiver_id,
                                           request.content, request.type)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     await _deliver(payload)
     return payload
 

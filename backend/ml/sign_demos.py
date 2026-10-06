@@ -10,7 +10,6 @@ Ishit/Ayush: Replace placeholder GIF URLs with actual recorded demonstrations.
 import os
 from typing import Dict, List, Optional
 
-
 # ─── Sign Demo Database ───────────────────────────────────────────
 # Each word has: gif_url, description, tips, difficulty, category
 

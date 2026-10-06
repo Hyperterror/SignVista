@@ -5,8 +5,8 @@ Unit tests for Configuration Manager.
 import json
 import os
 import tempfile
-import pytest
-from ml.config_manager import ConfigurationManager, ModuleConfig, ISLModulesConfig
+
+from ml.config_manager import ConfigurationManager, ModuleConfig
 
 
 class TestConfigurationManager:

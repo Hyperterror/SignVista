@@ -2,8 +2,7 @@
 Tests for Phase 3 — Learning & Gamified Dashboard
 """
 
-import pytest
-from app.session_store import get_session, ACHIEVEMENT_DEFINITIONS
+from app.session_store import ACHIEVEMENT_DEFINITIONS, get_session
 
 
 class TestPhase3:

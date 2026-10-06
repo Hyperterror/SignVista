@@ -21,9 +21,9 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from . import ModulePrediction
 from ..keypoint_extractor import FrameLandmarks, extract_landmarks
 from ..vocabulary import get_display_name, get_word_by_module_index
+from . import ModulePrediction
 
 logger = logging.getLogger(__name__)
 

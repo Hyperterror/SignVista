@@ -23,6 +23,8 @@ RUN pip install -r requirements.txt
 COPY backend/app ./app
 COPY backend/ml ./ml
 COPY backend/config ./config
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 COPY backend/static ./static
 COPY ISL-Unified-Project/models /app/ISL-Unified-Project/models
 COPY ISL-Unified-Project/config /app/ISL-Unified-Project/config

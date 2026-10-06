@@ -5,12 +5,12 @@ Tests the MediaPipe Hands-based hand landmark extraction
 and FNN gesture classification.
 """
 
+import cv2
 import numpy as np
 import pytest
-import cv2
 
-from ml.model_loader import ModelLoader
 from ml.config_manager import ConfigurationManager
+from ml.model_loader import ModelLoader
 from ml.modules.detection import DetectionModule
 
 

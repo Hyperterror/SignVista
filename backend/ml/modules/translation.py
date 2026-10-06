@@ -12,15 +12,16 @@ Features:
 - Handles single and multiple hand detections
 """
 
-import time
 import logging
 import os
-from typing import Optional, Dict, Any, List, Tuple
-import numpy as np
-import cv2
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
+import cv2
+import numpy as np
+
+from ..vocabulary import get_display_name, get_word_by_module_index
 from . import ModulePrediction
-from ..vocabulary import get_word_by_module_index, get_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class TranslationModule:
             logger.info(f"✅ YOLO detector loaded from {weights_path}")
             return net
         except Exception as e:
-            raise ValueError(f"Failed to load YOLO detector: {e}")
+            raise ValueError(f"Failed to load YOLO detector: {e}") from e
     
     def predict(self, frame: np.ndarray) -> Optional[ModulePrediction]:
         """

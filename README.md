@@ -67,9 +67,24 @@ from `backend/static/assets`.
 ## Tests and checks
 
 ```bash
-cd backend && venv\Scripts\python -m pytest tests     # isolated temp database
+cd backend && pip install -r requirements-dev.txt && ruff check . && pytest   # isolated temp database
 cd frontend && npm run lint && npm run typecheck && npm run build
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request
+and builds the Docker images on pushes to `main`.
+
+## Database migrations
+
+Schema changes use Alembic (`backend/alembic/`). Migrations run automatically
+at startup; databases created by older versions are adopted in place. After
+changing `app/models.py`:
+
+```bash
+cd backend && alembic revision --autogenerate -m "describe the change"
+```
+
+`tests/test_migrations.py` fails if the models and migrations drift apart.
 
 ## Known gaps (need content or models, not code)
 

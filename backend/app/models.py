@@ -1,8 +1,10 @@
 import time
-from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, Text, JSON, UniqueConstraint
+
+from sqlalchemy import JSON, Boolean, Column, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
+
 
 class User(Base):
     __tablename__ = "users"

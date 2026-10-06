@@ -6,12 +6,12 @@ POST /api/notifications/read/{notification_id}
 POST /api/notifications/read_all
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_user, require_own_session
-from app.database import get_db
 from app import models, schemas
+from app.database import get_db
+from app.dependencies import get_current_user, require_own_session
 
 router = APIRouter(prefix="/api", tags=["Notifications"])
 
@@ -74,7 +74,7 @@ def mark_all_read(current_user: dict = Depends(get_current_user), db: Session = 
     """Mark all notifications as read for the user."""
     unread_notifications = db.query(models.Notification).filter(
         models.Notification.user_id == current_user["user_id"],
-        models.Notification.is_read == False
+        models.Notification.is_read.is_(False)
     ).all()
 
     for n in unread_notifications:

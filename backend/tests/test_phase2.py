@@ -2,7 +2,6 @@
 Tests for Phase 2 — Profile, Text-to-Sign, Sign Demos, AR Landmarks
 """
 
-import pytest
 
 
 # ─── Profile Tests ────────────────────────────────────────────────

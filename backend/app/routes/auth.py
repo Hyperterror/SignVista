@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import ACCESS_COOKIE_NAME, get_current_user, resolve_user, _token_from_request
+from app.dependencies import ACCESS_COOKIE_NAME, _token_from_request, get_current_user, resolve_user
 from app.jwt_utils import create_access_token, create_ws_ticket
 from app.models import User, UserSettings, UserStats
 from app.rate_limit import client_ip, enforce, limiter
@@ -88,11 +88,11 @@ def auth_register(payload: AuthRegisterRequest, request: Request, response: Resp
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Phone number already registered")
+        raise HTTPException(status_code=400, detail="Phone number already registered") from None
     except Exception:
         db.rollback()
         logger.exception("Registration failed")
-        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.") from None
 
     db.refresh(user)
     get_session(user.user_id)

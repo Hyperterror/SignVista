@@ -5,14 +5,14 @@ Tests the LSTM-based temporal sequence analysis for word-level recognition
 (Hello, How are you, Thank you) - 3 classes.
 """
 
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
-from ml.modules.recognition import RecognitionModule
-from ml.modules import ModulePrediction
-from ml.model_loader import ModelLoader
 from ml.config_manager import ConfigurationManager
+from ml.model_loader import ModelLoader
+from ml.modules import ModulePrediction
+from ml.modules.recognition import RecognitionModule
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ class TestRecognitionModule:
         session_id = "test_session_structure"
         
         # Fill buffer with 45 frames
-        for i in range(45):
+        for _ in range(45):
             prediction = recognition_module.predict(test_frame, session_id)
         
         # After 45 frames, should get a prediction (or None if confidence too low)
@@ -118,10 +118,10 @@ class TestRecognitionModule:
     def test_should_clear_buffer(self, recognition_module):
         """Test buffer clearing logic."""
         # High confidence should trigger buffer clear
-        assert recognition_module.should_clear_buffer(0.9) == True
+        assert recognition_module.should_clear_buffer(0.9)
         
         # Low confidence should not trigger buffer clear
-        assert recognition_module.should_clear_buffer(0.5) == False
+        assert not recognition_module.should_clear_buffer(0.5)
     
     def test_confidence_threshold_filtering(self, recognition_module, test_frame):
         """Test that predictions below threshold are filtered out."""
@@ -131,7 +131,7 @@ class TestRecognitionModule:
         session_id = "test_session_threshold"
         
         # Fill buffer
-        for i in range(45):
+        for _ in range(45):
             prediction = recognition_module.predict(test_frame, session_id)
         
         # With very high threshold, should return None
@@ -142,7 +142,7 @@ class TestRecognitionModule:
     
     def test_word_mapping(self, recognition_module):
         """Test that all three word classes can be mapped."""
-        from ml.vocabulary import get_word_by_module_index, get_display_name
+        from ml.vocabulary import get_display_name, get_word_by_module_index
         
         # Test all three classes
         for class_idx in range(3):

@@ -11,16 +11,17 @@ Features:
 - Buffer clearing after confident predictions
 """
 
-import time
 import logging
 import threading
-from typing import Optional, Dict, Any
+import time
+from typing import Any, Dict, Optional
+
 import numpy as np
 
-from . import ModulePrediction
-from ..vocabulary import get_word_by_module_index, get_display_name
+from ..buffer_manager import KEYPOINT_DIM, clear_buffer, get_buffer
 from ..keypoint_extractor import extract_keypoints
-from ..buffer_manager import get_buffer, clear_buffer, KEYPOINT_DIM
+from ..vocabulary import get_display_name, get_word_by_module_index
+from . import ModulePrediction
 
 logger = logging.getLogger(__name__)
 

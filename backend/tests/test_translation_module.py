@@ -5,15 +5,15 @@ Tests the YOLO-v3 hand detection with SqueezeNet classification
 for 10 sign classes (G, I, K, O, P, S, U, V, X, Y).
 """
 
-import numpy as np
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 import os
 
-from ml.modules.translation import TranslationModule
-from ml.modules import ModulePrediction
-from ml.model_loader import ModelLoader
+import numpy as np
+import pytest
+
 from ml.config_manager import ConfigurationManager
+from ml.model_loader import ModelLoader
+from ml.modules import ModulePrediction
+from ml.modules.translation import TranslationModule
 
 
 @pytest.fixture
@@ -206,7 +206,7 @@ class TestTranslationModule:
     
     def test_word_mapping(self, translation_module):
         """Test that all 10 sign classes can be mapped."""
-        from ml.vocabulary import get_word_by_module_index, get_display_name
+        from ml.vocabulary import get_display_name, get_word_by_module_index
         
         # Test all 10 classes
         expected_words = ["G", "I", "K", "O", "P", "S", "U", "V", "X", "Y"]

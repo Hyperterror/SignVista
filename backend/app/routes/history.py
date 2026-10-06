@@ -6,15 +6,15 @@ GET /api/history/{sessionId}
 Ayush: Use this for the activity timeline.
 """
 
-from fastapi import APIRouter, Query, Depends
 from typing import Optional
 
-from app.schemas import HistoryResponse, ActivityEvent
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_own_session
 from app.models import ActivityLog
+from app.schemas import ActivityEvent, HistoryResponse
 
 router = APIRouter(prefix="/api/history", tags=["History"])
 

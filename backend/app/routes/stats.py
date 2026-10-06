@@ -11,9 +11,9 @@ import logging
 
 from fastapi import APIRouter, Depends
 
+from app.dependencies import get_current_user, require_own_session
 from app.schemas import SessionStatsResponse, WordStats
 from app.session_store import get_session
-from app.dependencies import get_current_user, require_own_session
 
 logger = logging.getLogger(__name__)
 

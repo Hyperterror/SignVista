@@ -5,10 +5,12 @@ Tests both unit test cases and property-based tests for model loading,
 validation, and GPU acceleration.
 """
 
-import pytest
-import numpy as np
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import numpy as np
+import pytest
+
 from ml.model_loader import ModelLoader
 
 

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 import jwt
 

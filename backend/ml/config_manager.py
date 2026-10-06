@@ -6,10 +6,10 @@ the ISL detection, recognition, and translation modules.
 """
 
 import json
-import os
-from typing import Optional, Tuple, List, Dict, Any
-from dataclasses import dataclass, field
 import logging
+import os
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

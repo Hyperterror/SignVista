@@ -9,21 +9,25 @@ Ayush: Use this for the learning progress page and mastery tracking.
 
 from fastapi import APIRouter, Depends
 
-from app.schemas import ProgressResponse, ProgressWordDetail, LearningPathResponse, DictionaryEntry
-from app.session_store import get_session
 from app.dependencies import get_current_user, require_own_session
+from app.schemas import DictionaryEntry, LearningPathResponse, ProgressResponse, ProgressWordDetail
+from app.session_store import get_session
 from ml.inference import get_recognizable_words
-from ml.vocabulary import WORD_LIST, get_display_name
 from ml.sign_demos import SIGN_DEMOS, media_url
+from ml.vocabulary import WORD_LIST, get_display_name
 
 router = APIRouter(prefix="/api/progress", tags=["Progress"])
 
 
 def get_mastery_tier(proficiency: float) -> str:
-    if proficiency >= 95: return "Master"
-    if proficiency >= 80: return "Advanced"
-    if proficiency >= 60: return "Intermediate"
-    if proficiency >= 30: return "Beginner"
+    if proficiency >= 95:
+        return "Master"
+    if proficiency >= 80:
+        return "Advanced"
+    if proficiency >= 60:
+        return "Intermediate"
+    if proficiency >= 30:
+        return "Beginner"
     return "Novice"
 
 

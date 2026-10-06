@@ -5,18 +5,19 @@ Tests the execute_modules_parallel, select_final_prediction, and
 predict_from_raw_frame functions with multi-module support.
 """
 
+import time
+from unittest.mock import Mock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import time
 
+from ml.config_manager import ConfigurationManager, ModuleConfig
 from ml.inference import (
     execute_modules_parallel,
-    select_final_prediction,
     predict_from_raw_frame,
+    select_final_prediction,
 )
 from ml.modules import ModulePrediction
-from ml.config_manager import ConfigurationManager, ModuleConfig
 
 
 @pytest.fixture

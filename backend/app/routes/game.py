@@ -98,7 +98,7 @@ def game_attempt(request: GameAttemptRequest, current_user: Dict = Depends(get_c
     try:
         frame = decode_base64_frame(request.frame)
     except FrameDecodeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not validate_frame(frame):
         raise HTTPException(status_code=400, detail="Invalid frame")
     frame = resize_frame(frame, target_width=640)
