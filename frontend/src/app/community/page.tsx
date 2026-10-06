@@ -2,69 +2,121 @@
 
 import { useState, useEffect } from 'react';
 import gsap from 'gsap';
-import { Users, MessageCircle, Heart, Share2, Plus, Search, Filter, Globe, ShieldCheck, X, Send } from 'lucide-react';
+import { Users, MessageCircle, Heart, Share2, Plus, Globe, ShieldCheck, X, Send } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { api } from '../utils/api';
+import { formatRelative, useNow } from '../utils/time';
 import { toast } from 'sonner';
 
+interface Comment {
+    id: string;
+    user_name: string;
+    content: string;
+    timestamp: number;
+}
+
+interface Post {
+    id: string;
+    user_name: string;
+    avatar_initials: string;
+    content: string;
+    likes: number;
+    comments_count: number;
+    liked_by_me: boolean;
+    timestamp: number;
+    is_official: boolean;
+    achievement_text?: string | null;
+    tags: string[];
+}
+
+interface ActiveUser {
+    user_id: string;
+    name: string;
+    initials: string;
+    is_online: boolean;
+}
+
+const PAGE_SIZE = 20;
+
 export default function CommunityPage() {
-    const [activeTab, setActiveTab] = useState('feed');
-    const [posts, setPosts] = useState<any[]>([]);
-    const [activeUsers, setActiveUsers] = useState<any[]>([]);
+    const router = useRouter();
+    const [activeTab, setActiveTab] = useState<'feed' | 'liked'>('feed');
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [hasMore, setHasMore] = useState(false);
+    const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [isPostModalOpen, setIsPostModalOpen] = useState(false);
     const [newPostContent, setNewPostContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [tagFilter, setTagFilter] = useState<string | null>(null);
+    const [openComments, setOpenComments] = useState<Record<string, Comment[] | undefined>>({});
+    const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
-    const fetchData = async () => {
+    const now = useNow();
+
+    const loadMore = async () => {
         try {
-            setIsLoading(true);
-            const [feedData, usersData] = await Promise.all([
-                api.getCommunityFeed(),
-                api.getActiveUsers()
-            ]);
-            setPosts(feedData.posts);
-            setActiveUsers(usersData.users);
-        } catch (error) {
-            console.error(error);
-            toast.error('Failed to sync with community');
+            setIsLoadingMore(true);
+            const feedData = await api.getCommunityFeed(posts.length, PAGE_SIZE);
+            setPosts((prev) => [...prev, ...feedData.posts.filter((p: Post) => !prev.some((x) => x.id === p.id))]);
+            setHasMore(feedData.has_more);
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to load more posts');
         } finally {
-            setIsLoading(false);
+            setIsLoadingMore(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
-
-        // Polling for active users every 30s
+        let ignore = false;
+        Promise.all([api.getCommunityFeed(0, PAGE_SIZE), api.getActiveUsers()])
+            .then(([feedData, usersData]) => {
+                if (ignore) return;
+                setPosts(feedData.posts);
+                setHasMore(feedData.has_more);
+                setActiveUsers(usersData.users);
+            })
+            .catch((error: any) => { if (!ignore) toast.error(error.message || 'Failed to sync with community'); })
+            .finally(() => { if (!ignore) setIsLoading(false); });
         const interval = setInterval(() => {
             api.getActiveUsers().then(data => setActiveUsers(data.users)).catch(() => { });
         }, 30000);
-
-        return () => clearInterval(interval);
+        return () => {
+            ignore = true;
+            clearInterval(interval);
+        };
     }, []);
 
     useEffect(() => {
-        if (!isLoading) {
-            gsap.fromTo('.community-card',
-                { scale: 0.95, opacity: 0, y: 20 },
-                { scale: 1, opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out' }
-            );
+        if (!isLoading && posts.length > 0) {
+            requestAnimationFrame(() => {
+                if (document.querySelector('.community-card')) {
+                    gsap.fromTo('.community-card',
+                        { scale: 0.95, opacity: 0, y: 20 },
+                        { scale: 1, opacity: 1, y: 0, duration: 0.5, stagger: 0.05, ease: 'power2.out' }
+                    );
+                }
+            });
         }
-    }, [isLoading, posts]);
+    }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCreatePost = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newPostContent.trim()) return;
+        const content = newPostContent.trim();
+        if (!content) return;
+        // #hashtags in the text become the post's tags
+        const tags = Array.from(new Set((content.match(/#[\p{L}\p{N}_]+/gu) || []).map((t) => t.slice(1)))).slice(0, 10);
 
         try {
             setIsSubmitting(true);
-            await api.createPost(newPostContent);
+            const post: Post = await api.createPost(content, tags);
             toast.success('Post shared with the community!');
             setNewPostContent('');
             setIsPostModalOpen(false);
-            fetchData(); // Refresh feed
-        } catch (error) {
-            toast.error('Failed to share post');
+            setPosts((prev) => [post, ...prev]);
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to share post');
         } finally {
             setIsSubmitting(false);
         }
@@ -73,23 +125,66 @@ export default function CommunityPage() {
     const handleLike = async (postId: string) => {
         try {
             const result = await api.likePost(postId);
-            if (result.status === 'ok') {
-                setPosts(prev => prev.map(p =>
-                    p.id === postId ? { ...p, likes: result.likes } : p
-                ));
-            }
-        } catch (error) {
-            toast.error('Could not process like');
+            setPosts(prev => prev.map(p =>
+                p.id === postId ? { ...p, likes: result.likes, liked_by_me: result.liked } : p
+            ));
+        } catch (error: any) {
+            toast.error(error.message || 'Could not process like');
         }
     };
 
-    const formatTime = (timestamp: number) => {
-        const diff = Date.now() / 1000 - timestamp;
-        if (diff < 60) return 'Just now';
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return `${Math.floor(diff / 86400)}d ago`;
+    const toggleComments = async (postId: string) => {
+        if (openComments[postId]) {
+            setOpenComments((prev) => ({ ...prev, [postId]: undefined }));
+            return;
+        }
+        try {
+            const comments: Comment[] = await api.getComments(postId);
+            setOpenComments((prev) => ({ ...prev, [postId]: comments }));
+        } catch (error: any) {
+            toast.error(error.message || 'Could not load comments');
+        }
     };
+
+    const submitComment = async (postId: string) => {
+        const content = (commentDrafts[postId] || '').trim();
+        if (!content) return;
+        try {
+            const comment: Comment = await api.addComment(postId, content);
+            setOpenComments((prev) => ({ ...prev, [postId]: [...(prev[postId] || []), comment] }));
+            setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
+            setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comments_count: p.comments_count + 1 } : p)));
+        } catch (error: any) {
+            toast.error(error.message || 'Could not add comment');
+        }
+    };
+
+    const handleShare = async (post: Post) => {
+        const text = `${post.user_name} on SignVista: "${post.content}"`;
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'SignVista Community', text });
+            } else {
+                await navigator.clipboard.writeText(text);
+                toast.success('Post copied to clipboard');
+            }
+        } catch {
+            // user cancelled the share sheet
+        }
+    };
+
+    const trendingTags = Object.entries(
+        posts.flatMap((p) => p.tags || []).reduce<Record<string, number>>((acc, t) => {
+            acc[t] = (acc[t] || 0) + 1;
+            return acc;
+        }, {})
+    ).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([t]) => t);
+
+    const visiblePosts = posts.filter((p) =>
+        (activeTab === 'feed' || p.liked_by_me) && (!tagFilter || (p.tags || []).includes(tagFilter))
+    );
+
+    const formatTime = (timestamp: number) => formatRelative(timestamp, now);
 
     return (
         <div className="min-h-screen p-6 md:p-12 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
@@ -119,20 +214,29 @@ export default function CommunityPage() {
                                 Live Feed
                             </button>
                             <button
-                                onClick={() => setActiveTab('explore')}
-                                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'explore' ? 'bg-[#105F68] text-white shadow-md' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                onClick={() => setActiveTab('liked')}
+                                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'liked' ? 'bg-[#105F68] text-white shadow-md' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                             >
-                                Explore Groups
+                                Liked Posts
                             </button>
                         </div>
+
+                        {tagFilter && (
+                            <div className="flex items-center gap-2 text-sm font-bold text-[#105F68]">
+                                Showing #{tagFilter}
+                                <button onClick={() => setTagFilter(null)} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Clear tag filter">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
 
                         {isLoading ? (
                             <div className="flex flex-col items-center justify-center py-20 opacity-50">
                                 <div className="w-12 h-12 border-4 border-[#105F68] border-t-transparent rounded-full animate-spin mb-4" />
                                 <p className="font-bold text-[#105F68]">Syncing community feed...</p>
                             </div>
-                        ) : posts.length > 0 ? (
-                            posts.map((item) => (
+                        ) : visiblePosts.length > 0 ? (
+                            visiblePosts.map((item) => (
                                 <div key={item.id} className="community-card bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-xl border border-gray-100 dark:border-gray-800 group transition-all hover:border-[#105F68]/30">
                                     <div className="flex items-center gap-4 mb-6">
                                         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#105F68] to-[#3A9295] flex items-center justify-center text-white text-xl font-black shadow-lg transform group-hover:rotate-2 transition-transform">
@@ -157,9 +261,9 @@ export default function CommunityPage() {
 
                                     <div className="flex flex-wrap gap-2 mb-6">
                                         {item.tags?.map((tag: string) => (
-                                            <span key={tag} className="text-sm font-bold text-[#105F68] dark:text-[#63C1BB] hover:underline cursor-pointer">
-                                                {tag}
-                                            </span>
+                                            <button key={tag} onClick={() => setTagFilter(tag)} className="text-sm font-bold text-[#105F68] dark:text-[#63C1BB] hover:underline">
+                                                #{tag}
+                                            </button>
                                         ))}
                                     </div>
 
@@ -175,25 +279,69 @@ export default function CommunityPage() {
                                     <div className="flex items-center gap-8 pt-6 border-t border-gray-50 dark:border-gray-800">
                                         <button
                                             onClick={() => handleLike(item.id)}
-                                            className="flex items-center gap-3 text-gray-400 hover:text-pink-500 transition-all font-bold group/like"
+                                            aria-pressed={item.liked_by_me}
+                                            className={`flex items-center gap-3 transition-all font-bold group/like ${item.liked_by_me ? 'text-pink-500' : 'text-gray-400 hover:text-pink-500'}`}
                                         >
-                                            <Heart className={`w-6 h-6 transition-transform group-active/like:scale-150 ${item.likes > 0 ? 'fill-pink-500 text-pink-500' : ''}`} />
+                                            <Heart className={`w-6 h-6 transition-transform group-active/like:scale-150 ${item.liked_by_me ? 'fill-pink-500 text-pink-500' : ''}`} />
                                             <span>{item.likes}</span>
                                         </button>
-                                        <button className="flex items-center gap-3 text-gray-400 hover:text-[#105F68] transition-all font-bold">
+                                        <button onClick={() => toggleComments(item.id)} className="flex items-center gap-3 text-gray-400 hover:text-[#105F68] transition-all font-bold">
                                             <MessageCircle className="w-6 h-6" />
                                             <span>{item.comments_count}</span>
                                         </button>
-                                        <button className="ml-auto text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                                        <button onClick={() => handleShare(item)} aria-label="Share post" className="ml-auto text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                                             <Share2 className="w-5 h-5" />
                                         </button>
                                     </div>
+
+                                    {openComments[item.id] && (
+                                        <div className="mt-6 space-y-4">
+                                            {openComments[item.id]!.length === 0 && (
+                                                <p className="text-sm text-gray-400">No comments yet.</p>
+                                            )}
+                                            {openComments[item.id]!.map((c) => (
+                                                <div key={c.id} className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800">
+                                                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                                                        {c.user_name} <span className="font-medium text-gray-400">· {formatTime(c.timestamp)}</span>
+                                                    </p>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{c.content}</p>
+                                                </div>
+                                            ))}
+                                            <form
+                                                onSubmit={(e) => { e.preventDefault(); submitComment(item.id); }}
+                                                className="flex gap-2"
+                                            >
+                                                <input
+                                                    value={commentDrafts[item.id] || ''}
+                                                    onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                                    maxLength={1000}
+                                                    placeholder="Write a comment..."
+                                                    className="flex-1 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#105F68]/30"
+                                                />
+                                                <button type="submit" className="px-4 rounded-xl bg-[#105F68] text-white" aria-label="Post comment">
+                                                    <Send className="w-4 h-4" />
+                                                </button>
+                                            </form>
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         ) : (
                             <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center border-2 border-dashed border-gray-200 dark:border-gray-700">
-                                <p className="text-xl font-bold text-gray-400">The community is quiet... be the first to post!</p>
+                                <p className="text-xl font-bold text-gray-400">
+                                    {activeTab === 'liked' ? "You haven't liked any posts yet." : 'The community is quiet... be the first to post!'}
+                                </p>
                             </div>
+                        )}
+
+                        {!isLoading && hasMore && (
+                            <button
+                                onClick={loadMore}
+                                disabled={isLoadingMore}
+                                className="w-full py-4 rounded-2xl font-bold text-[#105F68] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 disabled:opacity-50"
+                            >
+                                {isLoadingMore ? 'Loading...' : 'Load more'}
+                            </button>
                         )}
                     </div>
 
@@ -209,8 +357,16 @@ export default function CommunityPage() {
                             </h3>
 
                             <div className="space-y-6">
-                                {activeUsers.map((user, i) => (
-                                    <div key={i} className="flex items-center gap-4 group cursor-pointer hover:translate-x-1 transition-transform">
+                                {activeUsers.length === 0 && (
+                                    <p className="text-sm text-gray-500">Nobody else is online right now.</p>
+                                )}
+                                {activeUsers.map((user) => (
+                                    <button
+                                        key={user.user_id}
+                                        onClick={() => router.push(`/chat?to=${encodeURIComponent(user.user_id)}&name=${encodeURIComponent(user.name)}`)}
+                                        title={`Message ${user.name}`}
+                                        className="w-full text-left flex items-center gap-4 group cursor-pointer hover:translate-x-1 transition-transform"
+                                    >
                                         <div className="relative">
                                             <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-gray-500 group-hover:bg-[#105F68] group-hover:text-white transition-colors uppercase">
                                                 {user.initials}
@@ -221,9 +377,9 @@ export default function CommunityPage() {
                                         </div>
                                         <div>
                                             <p className="font-bold text-gray-800 dark:text-gray-200">{user.name}</p>
-                                            <p className="text-xs font-bold text-green-500 uppercase tracking-widest">Online</p>
+                                            <p className="text-xs font-bold text-green-500 uppercase tracking-widest">Online · Message</p>
                                         </div>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -237,9 +393,16 @@ export default function CommunityPage() {
                                 Trending Tags
                             </h3>
                             <div className="flex flex-wrap gap-2 relative z-10">
-                                {["#ISL_Daily", "#SignVista", "#LearnSign", "#DeafPride", "#IndiaSign"].map(tag => (
-                                    <button key={tag} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold transition-all hover:scale-105 active:scale-95">
-                                        {tag}
+                                {trendingTags.length === 0 && (
+                                    <p className="text-sm text-white/70">Add #hashtags to your posts to start a trend.</p>
+                                )}
+                                {trendingTags.map(tag => (
+                                    <button
+                                        key={tag}
+                                        onClick={() => setTagFilter(tag)}
+                                        className={`px-3 py-2 rounded-xl text-sm font-bold transition-all hover:scale-105 active:scale-95 ${tagFilter === tag ? 'bg-white text-[#105F68]' : 'bg-white/10 hover:bg-white/20'}`}
+                                    >
+                                        #{tag}
                                     </button>
                                 ))}
                             </div>
@@ -271,7 +434,8 @@ export default function CommunityPage() {
                             <textarea
                                 value={newPostContent}
                                 onChange={(e) => setNewPostContent(e.target.value)}
-                                placeholder="What's your Sign Language update today?"
+                                placeholder="What's your Sign Language update today? Use #hashtags to tag it."
+                                maxLength={2000}
                                 className="w-full h-40 p-6 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border border-gray-100 dark:border-gray-700 outline-none focus:border-[#105F68] transition-all resize-none text-lg font-medium dark:text-white"
                                 autoFocus
                             />

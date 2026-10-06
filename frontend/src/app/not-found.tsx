@@ -25,7 +25,7 @@ export default function NotFound() {
         <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Page Not Found</h2>
 
         <p className="text-xl text-gray-600 dark:text-gray-400 mb-12">
-          Oops! The page you're looking for doesn't exist in sign language... or in our app.
+          Oops! The page you&apos;re looking for doesn&apos;t exist in sign language... or in our app.
         </p>
 
         <div className="flex flex-wrap gap-4 justify-center">

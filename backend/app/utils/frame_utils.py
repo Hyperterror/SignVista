@@ -58,7 +58,7 @@ def decode_base64_frame(frame_str: str) -> np.ndarray:
         # Decode base64 to bytes
         img_bytes = base64.b64decode(frame_str)
     except Exception as e:
-        raise FrameDecodeError(f"Base64 decode failed: {str(e)}")
+        raise FrameDecodeError(f"Base64 decode failed: {str(e)}") from e
 
     # Convert to numpy array
     nparr = np.frombuffer(img_bytes, np.uint8)

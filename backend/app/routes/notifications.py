@@ -6,28 +6,34 @@ POST /api/notifications/read/{notification_id}
 POST /api/notifications/read_all
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
 
-from app.dependencies import get_current_user
-from app.database import get_db
 from app import models, schemas
+from app.database import get_db
+from app.dependencies import get_current_user, require_own_session
 
 router = APIRouter(prefix="/api", tags=["Notifications"])
 
 
 @router.get("/notifications/{session_id}", response_model=schemas.NotificationsListResponse)
-async def get_notifications(session_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_notifications(
+    session_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Fetch user logic notifications."""
-    if current_user["user_id"] != session_id:
-        raise HTTPException(status_code=403, detail="Unauthorized access")
+    require_own_session(current_user, session_id)
 
     notifications = db.query(models.Notification).filter(
         models.Notification.user_id == current_user["user_id"]
-    ).order_by(models.Notification.timestamp.desc()).all()
+    ).order_by(models.Notification.timestamp.desc()).limit(limit).all()
 
-    unread_count = sum(1 for n in notifications if not n.is_read)
+    unread_count = db.query(models.Notification).filter(
+        models.Notification.user_id == current_user["user_id"],
+        models.Notification.is_read.is_(False),
+    ).count()
 
     return schemas.NotificationsListResponse(
         unread_count=unread_count,
@@ -46,7 +52,7 @@ async def get_notifications(session_id: str, current_user: models.User = Depends
 
 
 @router.post("/notifications/read/{notification_id}")
-async def mark_read(notification_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def mark_read(notification_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Mark a specific notification as read."""
     notification = db.query(models.Notification).filter(
         models.Notification.id == notification_id,
@@ -64,11 +70,11 @@ async def mark_read(notification_id: int, current_user: models.User = Depends(ge
 
 
 @router.post("/notifications/read_all")
-async def mark_all_read(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def mark_all_read(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Mark all notifications as read for the user."""
     unread_notifications = db.query(models.Notification).filter(
         models.Notification.user_id == current_user["user_id"],
-        models.Notification.is_read == False
+        models.Notification.is_read.is_(False)
     ).all()
 
     for n in unread_notifications:

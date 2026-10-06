@@ -5,11 +5,13 @@ Uses hypothesis for property-based testing to verify universal properties
 across all inputs.
 """
 
-import pytest
-import numpy as np
-from hypothesis import given, strategies as st, settings
 from unittest.mock import Mock, patch
-from backend.ml.model_loader import ModelLoader
+
+import numpy as np
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from ml.model_loader import ModelLoader
 
 
 # Custom strategies for generating test data
@@ -38,6 +40,11 @@ def model_input_shape(draw):
         "translation": (1, 224, 224, 3)
     }
     return module, shapes[module]
+
+
+# Stateless helper instance shared by the property tests (hypothesis can't use
+# function-scoped fixtures)
+model_loader = ModelLoader()
 
 
 class TestModelLoaderProperties:
@@ -73,7 +80,7 @@ class TestModelLoaderProperties:
         # Create mock model with correct output
         mock_model = Mock()
         expected_shape = output_shapes[module_name]
-        num_classes = expected_shape[1]
+        _num_classes = expected_shape[1]
         
         # Generate valid softmax output
         output = np.random.rand(*expected_shape)
@@ -96,7 +103,7 @@ class TestModelLoaderProperties:
         seed=st.integers(min_value=0, max_value=10000)
     )
     @settings(max_examples=50)
-    def test_validate_model_output_range(self, model_loader, num_classes, seed):
+    def test_validate_model_output_range(self, num_classes, seed):
         """
         Property: For any model output, values should be in [0, 1] range and
         sum to approximately 1 (softmax property).
@@ -132,7 +139,7 @@ class TestModelLoaderProperties:
     )
     @settings(max_examples=50)
     def test_validate_model_wrong_shape_always_fails(
-        self, model_loader, wrong_classes, expected_classes
+        self, wrong_classes, expected_classes
     ):
         """
         Property: For any model output with wrong shape, validation should fail.
@@ -163,7 +170,7 @@ class TestModelLoaderProperties:
         module_name=st.sampled_from(["detection", "recognition", "translation", "yolo"])
     )
     @settings(max_examples=20)
-    def test_get_model_returns_consistent_result(self, model_loader, module_name):
+    def test_get_model_returns_consistent_result(self, module_name):
         """
         Property: For any module name, get_model should return consistent results
         when called multiple times.
@@ -179,7 +186,7 @@ class TestModelLoaderProperties:
         module_name=st.sampled_from(["detection", "recognition", "translation", "yolo"])
     )
     @settings(max_examples=20)
-    def test_get_model_info_always_returns_dict(self, model_loader, module_name):
+    def test_get_model_info_always_returns_dict(self, module_name):
         """
         Property: For any module name, get_model_info should always return a dictionary.
         
@@ -200,13 +207,12 @@ class TestModelLoaderProperties:
         )
     )
     @settings(max_examples=30)
-    @patch('backend.ml.model_loader.ModelLoader.load_detection_model')
-    @patch('backend.ml.model_loader.ModelLoader.load_recognition_model')
-    @patch('backend.ml.model_loader.ModelLoader.load_translation_model')
-    @patch('backend.ml.model_loader.ModelLoader.load_yolo_detector')
+    @patch('ml.model_loader.ModelLoader.load_detection_model')
+    @patch('ml.model_loader.ModelLoader.load_recognition_model')
+    @patch('ml.model_loader.ModelLoader.load_translation_model')
+    @patch('ml.model_loader.ModelLoader.load_yolo_detector')
     def test_load_all_models_returns_status_for_all(
-        self, mock_yolo, mock_trans, mock_recog, mock_detect,
-        model_loader, enabled_modules
+        self, mock_yolo, mock_trans, mock_recog, mock_detect, enabled_modules
     ):
         """
         Property: For any set of enabled modules, load_all_models should return
@@ -251,7 +257,7 @@ class TestModelLoaderProperties:
         seed=st.integers(min_value=0, max_value=10000)
     )
     @settings(max_examples=30)
-    def test_health_status_structure_is_consistent(self, model_loader, seed):
+    def test_health_status_structure_is_consistent(self, seed):
         """
         Property: For any state of ModelLoader, get_health_status should return
         a dictionary with consistent structure.
@@ -282,7 +288,7 @@ class TestModelLoaderProperties:
     )
     @settings(max_examples=20)
     def test_validate_model_handles_all_exceptions(
-        self, model_loader, exception_type
+        self, exception_type
     ):
         """
         Property: For any exception type raised during validation,
@@ -302,21 +308,21 @@ class TestModelLoaderProperties:
         num_models=st.integers(min_value=0, max_value=4)
     )
     @settings(max_examples=20)
-    def test_health_status_reflects_loaded_models(self, model_loader, num_models):
+    def test_health_status_reflects_loaded_models(self, num_models):
         """
         Property: For any number of loaded models, health status should
         accurately reflect the count.
         
         **Validates: Requirements 14.1, 14.4**
         """
-        # Add mock models
+        loader = ModelLoader()  # fresh instance: this test mutates loader state
         module_names = ["detection", "recognition", "translation", "yolo"]
         for i in range(num_models):
             module_name = module_names[i]
-            model_loader.models[module_name] = Mock()
-            model_loader.model_info[module_name] = {"loaded": True}
+            loader.models[module_name] = Mock()
+            loader.model_info[module_name] = {"loaded": True}
         
-        status = model_loader.get_health_status()
+        status = loader.get_health_status()
         
         assert len(status["models_loaded"]) == num_models
         assert status["total_models"] == num_models
@@ -326,18 +332,13 @@ class TestModelLoaderProperties:
 class TestModelValidationProperties:
     """Property-based tests specifically for model validation logic."""
     
-    @pytest.fixture
-    def model_loader(self):
-        """Create ModelLoader instance for testing."""
-        return ModelLoader()
-    
     @given(
         batch_size=st.integers(min_value=1, max_value=32),
         num_classes=st.integers(min_value=2, max_value=100)
     )
     @settings(max_examples=30)
     def test_validation_works_with_any_batch_size(
-        self, model_loader, batch_size, num_classes
+        self, batch_size, num_classes
     ):
         """
         Property: Model validation should work with any valid batch size.
@@ -364,7 +365,7 @@ class TestModelValidationProperties:
     )
     @settings(max_examples=20)
     def test_validation_detects_out_of_range_values(
-        self, model_loader, values_in_range
+        self, values_in_range
     ):
         """
         Property: Model validation should detect when output values are

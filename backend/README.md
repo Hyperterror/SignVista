@@ -1,92 +1,62 @@
-# SignVista Backend 🖐️
+# SignVista Backend
 
-Indian Sign Language Recognition System — FastAPI Backend
+FastAPI service for authentication, learning progress, games, community and
+real-time ISL recognition. See the [root README](../README.md) for setup.
 
-## Quick Start
+## Layout
 
-```bash
-# 1. Create virtual environment
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Linux/Mac
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run the server
-uvicorn app.main:app --reload --port 8000
-
-# 4. Open docs
-# http://localhost:8000/docs
+```text
+app/
+  main.py            app factory: middleware, routers, startup (migrations, models, warm-up)
+  config.py          settings from environment / .env (paths resolved absolutely)
+  database.py        SQLAlchemy engine (SQLite, WAL, foreign keys)
+  migrations.py      additive schema migration (new tables/columns)
+  models.py          ORM models
+  schemas.py         request/response models + validation
+  security.py        password hashing (bcrypt; legacy sha256_crypt upgraded on login)
+  jwt_utils.py       access tokens and WebSocket tickets
+  dependencies.py    auth dependencies (cookie or bearer), WebSocket auth + Origin check
+  rate_limit.py      in-process sliding-window limiter, proxy-aware client IP
+  session_store.py   per-user state: XP, levels, streaks, achievements, games, activity
+  routes/            API endpoints
+  utils/             frame decoding, throttling, AR payloads
+ml/
+  inference.py       pipeline orchestration and module selection
+  keypoint_extractor.py  MediaPipe Pose + Hand landmarkers (pooled, thread-safe)
+  modules/           detection / recognition / translation modules
+  model_loader.py    model loading and validation
+  vocabulary.py      label maps per module
+config/isl_modules.json   enabled modules, thresholds, selection strategy
+static/assets/signs/      sign demonstration media (served at /assets/signs)
+scripts/live_camera.py    webcam tool for checking the ML pipeline
+tests/                    pytest suite (uses a temporary database)
 ```
 
-## API Endpoints
+## API overview
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check + model status |
-| `GET` | `/api/vocabulary` | List available ISL words |
-| `POST` | `/api/recognize-frame` | Real-time sign translation |
-| `POST` | `/api/learn/attempt` | Practice a word + proficiency |
-| `GET` | `/api/stats/{sessionId}` | Learning statistics |
-| `POST` | `/api/game/start` | Start a game round |
-| `POST` | `/api/game/attempt` | Submit sign during game |
-| `GET` | `/api/game/result/{sid}/{gid}` | Game results + badges |
+All endpoints except `/health`, `/api/vocabulary`, `/api/dictionary*`,
+`/api/text-to-sign` and `/api/signs/*` require authentication. Paths that
+contain a `{sessionId}` must match the signed-in user (otherwise 403).
 
-## For Team Members
+| Area | Endpoints |
+| ---- | --------- |
+| Auth | `POST /api/auth/register`, `/login`, `/logout`, `GET /api/auth/me`, `POST /api/auth/ws-ticket` |
+| Recognition | `POST /api/recognize-frame`, `WS /api/ws/recognize?ticket=`, `POST /api/ar/landmarks` |
+| Learning | `POST /api/learn/attempt`, `GET /api/progress/{id}`, `/api/progress/{id}/next`, `/api/stats/{id}` |
+| Game | `POST /api/game/start`, `/api/game/attempt`, `GET /api/game/result/{id}/{gameId}` |
+| Profile | `GET/POST /api/profile`, `GET /api/dashboard/{id}`, `/api/history/{id}`, `/api/achievements/{id}` |
+| Settings | `GET /api/settings/{id}`, `PUT /api/settings`, `GET /api/notifications/{id}`, `POST /api/notifications/read*` |
+| Community | `GET /api/community/feed`, `POST /post`, `/like`, `GET/POST /posts/{id}/comments`, `GET /active-users` |
+| Chat | `WS /api/chat/ws?ticket=`, `GET /api/chat/contacts`, `/messages/{contactId}`, `POST /api/chat/send` |
+| Content | `GET /api/vocabulary`, `/api/dictionary`, `/api/dictionary/{word}`, `POST /api/text-to-sign`, `GET /api/signs/{word}` |
 
-### Ishit (ML Engineer)
-- Place trained `model.pth` at `ml/models/weights/model.pth`
-- Model architecture is in `ml/models/lstm_model.py` — ensure your training matches:
-  - Input: `(batch, 45, 99)` → 45 frames × 33 landmarks × 3 coords
-  - Output: 15 classes (see `ml/vocabulary.py`)
-- Update `ml/vocabulary.py` if your label order is different
+`recognize-frame` returns `buffer_status`, one of `collecting_NN%`, `ready`,
+`low_confidence`, `no_hands`, `no_face`, `no_model`, `landmarks_unavailable` or
+`throttled`.
 
-### Ayush (Frontend Engineer)
-- All request/response models are in `app/schemas.py`
-- Backend runs on `http://localhost:8000`
-- CORS is configured for `localhost:3000` and `localhost:3001`
-- Use Swagger UI at `/docs` to test endpoints interactively
+## Configuration
 
-## Architecture
-
-```
-backend/
-├── app/                     # FastAPI application
-│   ├── main.py              # Entry point + CORS + health
-│   ├── config.py            # Environment settings
-│   ├── schemas.py           # Pydantic request/response models
-│   ├── session_store.py     # In-memory session management
-│   ├── routes/              # API endpoints
-│   │   ├── translate.py     # POST /api/recognize-frame
-│   │   ├── learn.py         # POST /api/learn/attempt
-│   │   ├── game.py          # POST /api/game/*
-│   │   ├── stats.py         # GET /api/stats/{sessionId}
-│   │   └── vocabulary.py    # GET /api/vocabulary
-│   └── utils/
-│       └── frame_utils.py   # Base64 decode + validation
-├── ml/                      # ML pipeline (interfaces for Ishit)
-│   ├── inference.py         # Main prediction orchestrator
-│   ├── buffer_manager.py    # 45-frame keypoint buffer
-│   ├── keypoint_extractor.py # Mediapipe Pose
-│   ├── face_detector.py     # Haar cascade gate
-│   ├── vocabulary.py        # Word list + label mapping
-│   └── models/
-│       ├── lstm_model.py    # LSTM architecture (PyTorch)
-│       └── weights/         # Drop model.pth here
-├── tests/                   # pytest test suite
-├── Dockerfile               # For Render.com
-└── requirements.txt
-```
-
-## Docker
-
-```bash
-docker-compose up --build
-```
-
-## Testing
-
-```bash
-pytest tests/ -v
-```
+Every setting is documented in [.env.example](.env.example). Production
+(`ENV` other than `development`) requires `SECRET_KEY`, sends `Secure`
+cookies and HSTS, and hides `/docs`. Debug routes are only mounted when
+`ENABLE_DEBUG_ROUTES=true`.

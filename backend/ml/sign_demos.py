@@ -7,8 +7,8 @@ This is the asset database for text-to-sign conversion and learn mode demos.
 Ishit/Ayush: Replace placeholder GIF URLs with actual recorded demonstrations.
 """
 
-from typing import Dict, List
-
+import os
+from typing import Dict, List, Optional
 
 # ─── Sign Demo Database ───────────────────────────────────────────
 # Each word has: gif_url, description, tips, difficulty, category
@@ -223,9 +223,25 @@ SIGN_DEMOS: Dict[str, Dict] = {
 }
 
 
-def get_sign_demo(word: str) -> Dict:
-    """Get sign demo data for a word."""
-    return SIGN_DEMOS.get(word.lower(), None)
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+
+
+def media_url(path: str) -> str:
+    """Return `path` if the media file exists under backend/static, else ''."""
+    if not path:
+        return ""
+    return path if os.path.isfile(os.path.join(STATIC_DIR, path.lstrip("/"))) else ""
+
+
+def get_sign_demo(word: str) -> Optional[Dict]:
+    """
+    Sign demo data for a word. `gif_url` is '' when the media file hasn't been
+    added yet (see backend/static/assets/signs/README.md).
+    """
+    demo = SIGN_DEMOS.get(word.lower())
+    if demo is None:
+        return None
+    return {**demo, "gif_url": media_url(demo.get("gif_url", ""))}
 
 
 def get_all_sign_words() -> List[str]:

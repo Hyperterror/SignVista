@@ -12,7 +12,6 @@ import json
 import os
 from typing import Dict, List, Optional
 
-
 # ─── Core Vocabulary (must match model training labels) ────────────
 
 VOCABULARY: List[Dict] = [
@@ -124,7 +123,8 @@ def _load_translation_vocab() -> None:
     """Load translation vocabulary from translation_classes.json."""
     global TRANSLATION_VOCAB
     
-    config_path = os.path.join("../ISL-Unified-Project", "config", "translation_classes.json")
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    config_path = os.path.join(repo_root, "ISL-Unified-Project", "config", "translation_classes.json")
     
     try:
         if os.path.exists(config_path):
@@ -156,7 +156,7 @@ def _load_translation_vocab() -> None:
                 {"module": "translation", "index": 8, "word": "X", "display_name": "X", "priority": 3, "category": "letter"},
                 {"module": "translation", "index": 9, "word": "Y", "display_name": "Y", "priority": 3, "category": "letter"},
             ]
-    except Exception as e:
+    except Exception:
         # Fallback to hardcoded values on any error
         TRANSLATION_VOCAB = [
             {"module": "translation", "index": 0, "word": "G", "display_name": "G", "priority": 3, "category": "letter"},
@@ -270,7 +270,7 @@ def get_unified_vocabulary() -> List[Dict]:
     
     # Collect all entries from all modules
     all_entries = []
-    for module_name, vocab in _MODULE_VOCABULARIES.items():
+    for _module_name, vocab in _MODULE_VOCABULARIES.items():
         all_entries.extend(vocab)
     
     # Sort by priority (lower number = higher priority)

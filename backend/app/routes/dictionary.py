@@ -8,18 +8,19 @@ Ayush: Use this for the browsable ISL dictionary.
        Supports filtering by category, difficulty, and search term.
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List, Set
+from typing import Optional, Set
 
-from app.schemas import DictionaryResponse, DictionaryEntry
-from ml.sign_demos import SIGN_DEMOS
-from ml.vocabulary import WORD_DISPLAY, is_valid_word
+from fastapi import APIRouter, HTTPException, Query
+
+from app.schemas import DictionaryEntry, DictionaryResponse
+from ml.sign_demos import SIGN_DEMOS, media_url
+from ml.vocabulary import get_display_name
 
 router = APIRouter(prefix="/api", tags=["Dictionary"])
 
 
 @router.get("/dictionary", response_model=DictionaryResponse)
-async def get_dictionary(
+def get_dictionary(
     category: Optional[str] = Query(None, description="Filter by category (e.g., greetings, common)"),
     difficulty: Optional[str] = Query(None, description="Filter by difficulty (easy, medium, hard)"),
     search: Optional[str] = Query(None, description="Search by word name")
@@ -45,11 +46,11 @@ async def get_dictionary(
             
         entries.append(DictionaryEntry(
             word=word_key,
-            display_name=WORD_DISPLAY.get(word_key, word_key),
+            display_name=get_display_name(word_key),
             hindi_name=demo.get("hindi_name", ""),
             category=demo.get("category", "common"),
             difficulty=demo.get("difficulty", "easy"),
-            gif_url=demo.get("gif_url", ""),
+            gif_url=media_url(demo.get("gif_url", "")),
             description=demo.get("description", ""),
             tips=demo.get("tips", [])
         ))
@@ -63,7 +64,7 @@ async def get_dictionary(
 
 
 @router.get("/dictionary/{word}", response_model=DictionaryEntry)
-async def get_dictionary_entry(word: str):
+def get_dictionary_entry(word: str):
     """
     Get full metadata for a single word.
     """
@@ -75,11 +76,11 @@ async def get_dictionary_entry(word: str):
         
     return DictionaryEntry(
         word=word_key,
-        display_name=WORD_DISPLAY.get(word_key, word_key),
+        display_name=get_display_name(word_key),
         hindi_name=demo.get("hindi_name", ""),
         category=demo.get("category", "common"),
         difficulty=demo.get("difficulty", "easy"),
-        gif_url=demo.get("gif_url", ""),
+        gif_url=media_url(demo.get("gif_url", "")),
         description=demo.get("description", ""),
         tips=demo.get("tips", [])
     )

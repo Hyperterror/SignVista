@@ -9,10 +9,11 @@ Ayush: Use this for the profile/stats page with charts.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 
+from app.dependencies import get_current_user, require_own_session
 from app.schemas import SessionStatsResponse, WordStats
-from app.session_store import get_session, session_exists
+from app.session_store import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api", tags=["Stats"])
 
 
 @router.get("/stats/{session_id}", response_model=SessionStatsResponse)
-async def get_stats(session_id: str):
+def get_stats(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get complete learning & game statistics for a session.
 
@@ -46,8 +47,7 @@ async def get_stats(session_id: str):
     }
     ```
     """
-    if not session_id or not session_id.strip():
-        raise HTTPException(status_code=400, detail="sessionId is required")
+    require_own_session(current_user, session_id)
 
     session = get_session(session_id)
     learn_stats = session.learn.get_stats()

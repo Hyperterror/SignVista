@@ -1,14 +1,16 @@
 """
 SignVista Frame Buffer Manager
 
-Manages per-session buffers of keypoint sequences.
-The LSTM needs 45 consecutive frames before it can make a prediction.
-This module accumulates keypoints frame-by-frame until the buffer is full.
+Per-session sliding windows of keypoint vectors for the word-level LSTM
+(it needs BUFFER_SIZE consecutive frames before it can predict).
 
-Ishit: BUFFER_SIZE must match your LSTM's expected sequence length.
+Buffers are evicted after a period of inactivity so abandoned sessions and
+finished games don't accumulate in memory.
 """
 
 import logging
+import threading
+import time
 from collections import deque
 from typing import Dict, Optional
 
@@ -18,8 +20,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Input dimensions
 KEYPOINT_DIM = 258  # 132 Pose + 63 Left Hand + 63 Right Hand
+BUFFER_IDLE_TTL_SECONDS = 10 * 60
 
 
 class FrameBuffer:
@@ -28,41 +30,37 @@ class FrameBuffer:
     def __init__(self, buffer_size: int = settings.BUFFER_SIZE):
         self.buffer_size = buffer_size
         self.keypoints: deque = deque(maxlen=buffer_size)
+        self.last_used = time.monotonic()
+        self._lock = threading.Lock()
 
     def append(self, keypoints: np.ndarray):
         """Add a keypoint vector to the buffer."""
         if keypoints.shape[0] != KEYPOINT_DIM:
             logger.warning(f"Expected {KEYPOINT_DIM}-dim keypoints, got {keypoints.shape[0]}")
             return
-        self.keypoints.append(keypoints)
+        with self._lock:
+            self.keypoints.append(keypoints)
+            self.last_used = time.monotonic()
 
     @property
     def is_ready(self) -> bool:
-        """True when buffer has enough frames for LSTM prediction."""
         return len(self.keypoints) >= self.buffer_size
 
     @property
     def fill_ratio(self) -> float:
-        """How full the buffer is (0.0 to 1.0)."""
         return len(self.keypoints) / self.buffer_size
 
     def get_sequence(self) -> Optional[np.ndarray]:
-        """
-        Get the sequence as a numpy array for LSTM input.
-
-        Returns:
-            np.ndarray of shape (1, buffer_size, KEYPOINT_DIM) or None if not ready
-        """
-        if not self.is_ready:
-            return None
-
-        sequence = np.array(list(self.keypoints), dtype=np.float32)
-        # Add batch dimension: (1, 45, 99)
+        """Shape (1, buffer_size, KEYPOINT_DIM), or None if not ready."""
+        with self._lock:
+            if len(self.keypoints) < self.buffer_size:
+                return None
+            sequence = np.array(list(self.keypoints), dtype=np.float32)
         return np.expand_dims(sequence, axis=0)
 
     def clear(self):
-        """Clear the buffer."""
-        self.keypoints.clear()
+        with self._lock:
+            self.keypoints.clear()
 
     @property
     def length(self) -> int:
@@ -72,21 +70,49 @@ class FrameBuffer:
 # ─── Global Buffer Store (per session) ────────────────────────────
 
 _buffers: Dict[str, FrameBuffer] = {}
+_lock = threading.Lock()
+_last_sweep = 0.0
 
 
-def get_buffer(session_id: str) -> FrameBuffer:
+def _sweep(now: float) -> None:
+    global _last_sweep
+    if now - _last_sweep < 60:
+        return
+    _last_sweep = now
+    stale = [sid for sid, b in _buffers.items() if now - b.last_used > BUFFER_IDLE_TTL_SECONDS]
+    for sid in stale:
+        del _buffers[sid]
+
+
+def get_buffer(session_id: str, buffer_size: Optional[int] = None) -> FrameBuffer:
     """Get or create a frame buffer for a session."""
-    if session_id not in _buffers:
-        _buffers[session_id] = FrameBuffer()
-    return _buffers[session_id]
+    size = buffer_size or settings.BUFFER_SIZE
+    now = time.monotonic()
+    with _lock:
+        _sweep(now)
+        buf = _buffers.get(session_id)
+        if buf is None or buf.buffer_size != size:
+            buf = FrameBuffer(size)
+            _buffers[session_id] = buf
+        buf.last_used = now
+        return buf
+
+
+def peek_buffer(session_id: str) -> Optional[FrameBuffer]:
+    """Return an existing buffer without creating one."""
+    return _buffers.get(session_id)
 
 
 def clear_buffer(session_id: str):
-    """Clear a session's buffer."""
-    if session_id in _buffers:
-        _buffers[session_id].clear()
+    buf = _buffers.get(session_id)
+    if buf is not None:
+        buf.clear()
 
 
 def delete_buffer(session_id: str):
-    """Remove a session's buffer entirely."""
-    _buffers.pop(session_id, None)
+    with _lock:
+        _buffers.pop(session_id, None)
+
+
+def buffer_count() -> int:
+    return len(_buffers)

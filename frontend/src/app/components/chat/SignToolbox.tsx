@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import gsap from 'gsap';
-import { Type, Mic, MicOff, Send, Trash2, X } from 'lucide-react';
+import { Type, Mic, MicOff, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../utils/api';
+import { SignMedia } from '../SignMedia';
 
 interface SignWord {
     word: string;
@@ -51,7 +51,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
         try {
             const response = await api.translateText(inputText);
             setOutputSigns(response.words);
-        } catch (error) {
+        } catch {
             toast.error('Sign conversion failed');
         } finally {
             setIsProcessing(false);
@@ -76,7 +76,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
         try {
             const response = await api.translateText(transcript);
             setOutputSigns(response.words);
-        } catch (error) {
+        } catch {
             toast.error('Voice conversion failed');
         } finally {
             setIsProcessing(false);
@@ -144,7 +144,7 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
                         </div>
                         {transcript && (
                             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl text-xs italic text-gray-600 dark:text-gray-400">
-                                "{transcript}"
+                                &ldquo;{transcript}&rdquo;
                             </div>
                         )}
                     </div>
@@ -158,10 +158,10 @@ export default function SignToolbox({ onClose }: { onClose?: () => void }) {
                             <div key={i} className="space-y-1 animate-in zoom-in duration-300" style={{ animationDelay: `${i * 0.1}s` }}>
                                 <div className="aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:scale-105">
                                     {sign.found ? (
-                                        <img src={`http://localhost:8001${sign.gif_url}`} alt={sign.word} className="w-full h-full object-cover" />
+                                        <SignMedia gifUrl={sign.gif_url} label={sign.display_name || sign.word} className="w-full h-full" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center p-2">
-                                            No sign for "{sign.word}"
+                                            No sign for &ldquo;{sign.word}&rdquo;
                                         </div>
                                     )}
                                 </div>

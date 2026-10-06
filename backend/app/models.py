@@ -1,8 +1,10 @@
 import time
-from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, Text, JSON
+
+from sqlalchemy import JSON, Boolean, Column, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -10,11 +12,15 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False, index=True)
     phone = Column(String(20), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     preferred_language = Column(String(10), default="en")
+    subscription_tier = Column(String(20), default="free")  # 'free', 'pro', 'welfare'
+    daily_translation_seconds_used = Column(Integer, default=0)
     created_at = Column(Float, default=time.time)
+    # Incremented on logout / password change to revoke all previously issued tokens
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
 
     stats = relationship("UserStats", back_populates="user", uselist=False, cascade="all, delete-orphan")
     settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -32,9 +38,13 @@ class UserStats(Base):
     total_xp = Column(Integer, default=0)
     level = Column(Integer, default=1)
     games_played = Column(Integer, default=0)
-    best_game_score = Column(Integer, default=0)
+    best_score = Column(Integer, default=0)         # Renamed alias for best_game_score
+    best_game_score = Column(Integer, default=0)    # Keep original for backward compat
     unlocked_achievements = Column(JSON, default=list)  # List of string IDs
-    
+    current_streak = Column(Integer, default=0, server_default="0")
+    longest_streak = Column(Integer, default=0, server_default="0")
+    last_active_date = Column(String(10), nullable=True)  # YYYY-MM-DD (UTC)
+
     user = relationship("User", back_populates="stats")
 
 
@@ -49,7 +59,7 @@ class LearningPrecision(Base):
     correct_count = Column(Integer, default=0)
     best_confidence = Column(Float, default=0.0)
     proficiency = Column(Float, default=0.0)  # Calculated percentage
-    last_practiced = Column(Float, default=time.time)
+    last_attempt_time = Column(Float, nullable=True)  # Unix timestamp of last practice
 
     user = relationship("User", back_populates="learning_precision")
 
@@ -60,15 +70,29 @@ class GameSessionHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(50), ForeignKey("users.user_id"))
+    game_id = Column(String(50), nullable=True)  # In-memory game UUID
     score = Column(Integer, default=0)
     words_completed = Column(Integer, default=0)
     total_attempts = Column(Integer, default=0)
     best_streak = Column(Integer, default=0)
     accuracy = Column(Float, default=0.0)
-    timestamp = Column(Float, default=time.time)
+    duration = Column(Integer, default=30)       # Game duration in seconds
+    played_at = Column(Float, default=time.time)  # Game start timestamp
+    timestamp = Column(Float, default=time.time)  # Row insert timestamp
 
     user = relationship("User", back_populates="game_history")
 
+class ChatMessage(Base):
+    """Real-time chat message history."""
+    __tablename__ = "chat_messages"
+
+    id = Column(String(50), primary_key=True, index=True)
+    sender_id = Column(String(50), ForeignKey("users.user_id"), index=True)
+    receiver_id = Column(String(50), ForeignKey("users.user_id"), index=True)
+    content = Column(Text, nullable=False)
+    type = Column(String(20), default="text")
+    timestamp = Column(Float, default=time.time)
+    is_read = Column(Boolean, default=False)
 
 class ChatAnalytics(Base):
     """Logs when users interact with community or AI chats, for broad analytics."""
@@ -110,3 +134,54 @@ class Notification(Base):
     action_url = Column(String(200), nullable=True) # Optional link to click
 
     user = relationship("User", back_populates="notifications")
+
+
+class CommunityPostBase(Base):
+    """Global community feed posts."""
+    __tablename__ = "community_posts"
+
+    id = Column(String(50), primary_key=True, index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), nullable=True, index=True)
+    user_name = Column(String(100), nullable=False)
+    avatar_initials = Column(String(10), nullable=False)
+    content = Column(Text, nullable=False)
+    likes = Column(Integer, default=0)
+    comments_count = Column(Integer, default=0)
+    timestamp = Column(Float, default=time.time)
+    is_official = Column(Boolean, default=False)
+    achievement_text = Column(String(200), nullable=True)
+    tags = Column(JSON, default=list)
+
+class CommunityCommentBase(Base):
+    """Replies to community posts."""
+    __tablename__ = "community_comments"
+
+    id = Column(String(50), primary_key=True, index=True)
+    post_id = Column(String(50), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), nullable=True, index=True)
+    user_name = Column(String(100), nullable=False)
+    content = Column(Text, nullable=False)
+    timestamp = Column(Float, default=time.time)
+
+
+class PostLike(Base):
+    """One like per user per post."""
+    __tablename__ = "community_post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_like"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(String(50), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(String(50), ForeignKey("users.user_id"), index=True, nullable=False)
+    timestamp = Column(Float, default=time.time)
+
+
+class ActivityLog(Base):
+    """Persistent user activity timeline (learn attempts, games, achievements, level-ups)."""
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), index=True, nullable=False)
+    type = Column(String(50), nullable=False)
+    data = Column(JSON, default=dict)
+    xp_earned = Column(Integer, default=0, server_default="0")
+    timestamp = Column(Float, default=time.time, index=True)

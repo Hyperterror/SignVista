@@ -12,18 +12,19 @@ Ayush: Send any text, we'll tokenize it and return matched sign GIFs.
 
 import logging
 import re
-from typing import List
+import unicodedata
+from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException
 
 from app.schemas import (
+    SignDemoResponse,
+    SignWordData,
     TextToSignRequest,
     TextToSignResponse,
-    SignWordData,
-    SignDemoResponse,
 )
 from ml.sign_demos import SIGN_DEMOS, get_sign_demo
-from ml.vocabulary import WORD_DISPLAY, WORD_TO_INDEX, is_valid_word
+from ml.vocabulary import get_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -87,72 +88,87 @@ ENGLISH_SYNONYMS = {
 }
 
 
+TIME_INDICATORS = {"tomorrow", "yesterday", "today", "now", "monday", "tuesday", "wednesday",
+                   "thursday", "friday", "saturday", "sunday", "morning", "night", "evening", "soon", "later"}
+ISL_STOP_WORDS = {"is", "am", "are", "the", "a", "an", "to", "be", "been", "was", "were", "of"}
+MAX_PHRASE_WORDS = 3
+
+
 class ISLGrammarEngine:
     """
-    Restructures English sentences into ISL (Time-Topic-Comment) grammar.
-    Example: "I am going to the market tomorrow" -> "Tomorrow I go market"
+    Restructures English token lists into ISL (Time-Topic-Comment) order.
+    Example: "I am going to the market tomorrow" -> "tomorrow i going market"
     """
     @staticmethod
+    def restructure_tokens(tokens: List[str]) -> List[str]:
+        times = [t for t in tokens if t in TIME_INDICATORS]
+        others = [t for t in tokens if t not in TIME_INDICATORS and t not in ISL_STOP_WORDS]
+        return times + others
+
+    @staticmethod
     def restructure(text: str) -> str:
-        text = text.lower().strip()
-        # Remove punctuation
-        text = re.sub(r'[^\w\s]', '', text)
-        
-        words = text.split()
-        if not words:
-            return ""
+        words = re.sub(r"[^\w\s]", "", text.lower()).split()
+        return " ".join(ISLGrammarEngine.restructure_tokens(words))
 
-        # Basic Time Extraction
-        time_indicators = ["tomorrow", "yesterday", "today", "now", "monday", "tuesday", "morning", "night", "soon"]
-        times = [w for w in words if w in time_indicators]
-        others = [w for w in words if w not in time_indicators]
 
-        # Remove common "stop" words for ISL (articles, auxiliary verbs)
-        stop_words = ["is", "am", "are", "the", "a", "an", "to", "be", "been", "was", "were"]
-        others = [w for w in others if w not in stop_words]
-
-        # Simple re-ordering: Time + Topic + Comment
-        # This is a heuristic for hackathon version
-        reordered = times + others
-        return " ".join(reordered)
+def _phrase_lookup(language: str) -> Dict[str, str]:
+    """Phrase (space separated, lower-case) -> sign key."""
+    table: Dict[str, str] = {}
+    for key in SIGN_DEMOS:
+        if len(key) > 1:  # skip alphabet letters
+            table[key.replace("_", " ")] = key
+    table.update(ENGLISH_SYNONYMS)
+    if language == "hi":
+        table.update(HINDI_TO_ENGLISH)
+    return table
 
 
 def _tokenize_text(text: str, language: str) -> List[str]:
     """
-    Split text into tokens and map to vocabulary words.
-    Handles both English and Hindi input.
-    Includes alphabet fallback for unknown words.
+    Map text to sign keys:
+    1. longest-match multi-word phrases ("how are you" -> how_are_you)
+    2. single words and synonyms
+    3. finger-spelling fallback for unknown English words (a-z only)
+    English input is reordered into ISL Time-Topic-Comment order first.
     """
-    # 1. Restructure logic
-    if language == "en":
-        text = ISLGrammarEngine.restructure(text)
-    else:
-        text = text.strip().lower()
+    table = _phrase_lookup(language)
+    # Keep letters, digits, marks (needed for Devanagari vowel signs) and spaces
+    cleaned = "".join(ch if (ch.isalnum() or ch.isspace() or unicodedata.category(ch).startswith("M")) else " "
+                      for ch in text.lower())
+    words = cleaned.split()
 
-    matched_tokens = []
-
-    # Map chunks or words
-    words = text.split()
-    for w in words:
-        # Check if direct match or synonym
-        if is_valid_word(w):
-            matched_tokens.append(w)
-        elif w in ENGLISH_SYNONYMS:
-            matched_tokens.append(ENGLISH_SYNONYMS[w])
-        elif language == "hi" and w in HINDI_TO_ENGLISH:
-            matched_tokens.append(HINDI_TO_ENGLISH[w])
+    # Pass 1: phrase matching on the original order (stop words still present)
+    units: List[str] = []
+    i = 0
+    while i < len(words):
+        for n in range(min(MAX_PHRASE_WORDS, len(words) - i), 1, -1):
+            phrase = " ".join(words[i:i + n])
+            if phrase in table:
+                units.append(table[phrase])
+                i += n
+                break
         else:
-            # ALPHABET FALLBACK
-            # Split the unknown word into individual letters
-            for char in w:
-                if char.isalpha():
-                    matched_tokens.append(char)
+            units.append(words[i])
+            i += 1
 
-    return matched_tokens
+    if language == "en":
+        units = ISLGrammarEngine.restructure_tokens(units)
+
+    tokens: List[str] = []
+    for w in units:
+        if w in SIGN_DEMOS and len(w) > 1:
+            tokens.append(w)
+        elif w in table:
+            tokens.append(table[w])
+        elif re.fullmatch(r"[a-z]+", w):
+            tokens.extend(w)  # finger-spell
+        else:
+            tokens.append(w)  # unmatched (reported as not found)
+    return tokens
 
 
 @router.post("/text-to-sign", response_model=TextToSignResponse)
-async def text_to_sign(request: TextToSignRequest):
+def text_to_sign(request: TextToSignRequest):
     """
     Convert text to sign language GIF demonstrations.
 
@@ -201,7 +217,7 @@ async def text_to_sign(request: TextToSignRequest):
         if demo:
             sign_words.append(SignWordData(
                 word=word_key,
-                display_name=WORD_DISPLAY.get(word_key, word_key),
+                display_name=get_display_name(word_key),
                 found=True,
                 gif_url=demo["gif_url"],
                 description=demo["description"],
@@ -237,7 +253,7 @@ async def text_to_sign(request: TextToSignRequest):
 
 
 @router.get("/signs/{word}", response_model=SignDemoResponse)
-async def get_sign(word: str):
+def get_sign(word: str):
     """
     Get detailed sign demonstration for a single word.
     Returns GIF URL, description, tips, and difficulty.
@@ -253,7 +269,7 @@ async def get_sign(word: str):
 
     return SignDemoResponse(
         word=word.lower(),
-        display_name=WORD_DISPLAY.get(word.lower(), word),
+        display_name=get_display_name(word.lower()),
         gif_url=demo["gif_url"],
         description=demo["description"],
         tips=demo.get("tips", []),

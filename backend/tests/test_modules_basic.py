@@ -5,21 +5,17 @@ These tests verify the module logic, vocabulary mappings, and data structures
 work correctly independently of model availability.
 """
 
-import numpy as np
-import pytest
-from unittest.mock import Mock, MagicMock
 import time
+from unittest.mock import Mock
 
 from ml.modules import ModulePrediction
-from ml.modules.detection import DetectionModule
 from ml.modules.recognition import RecognitionModule
-from ml.modules.translation import TranslationModule
 from ml.vocabulary import (
-    get_word_by_module_index,
-    get_display_name,
     DETECTION_VOCAB,
     RECOGNITION_VOCAB,
-    TRANSLATION_VOCAB
+    TRANSLATION_VOCAB,
+    get_display_name,
+    get_word_by_module_index,
 )
 
 
@@ -112,10 +108,10 @@ class TestRecognitionModuleBasic:
         module = RecognitionModule(mock_model, config)
         
         # Test buffer clearing logic
-        assert module.should_clear_buffer(0.9) == True
-        assert module.should_clear_buffer(0.8) == True
-        assert module.should_clear_buffer(0.79) == False
-        assert module.should_clear_buffer(0.5) == False
+        assert module.should_clear_buffer(0.9)
+        assert module.should_clear_buffer(0.8)
+        assert not module.should_clear_buffer(0.79)
+        assert not module.should_clear_buffer(0.5)
 
 
 class TestTranslationModuleBasic:

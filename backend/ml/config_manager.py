@@ -6,10 +6,10 @@ the ISL detection, recognition, and translation modules.
 """
 
 import json
-import os
-from typing import Optional, Tuple, List, Dict, Any
-from dataclasses import dataclass, field, asdict
 import logging
+import os
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class ISLModulesConfig:
     enable_parallel_execution: bool = False
     performance_monitoring: bool = True
     fallback_to_existing_lstm: bool = True
+    require_face_detection: bool = False
 
 
 class ConfigurationManager:
@@ -74,7 +75,8 @@ class ConfigurationManager:
         "prediction_strategy": "priority",
         "enable_parallel_execution": False,
         "performance_monitoring": True,
-        "fallback_to_existing_lstm": True
+        "fallback_to_existing_lstm": True,
+        "require_face_detection": False
     }
     
     def __init__(self, config_path: Optional[str] = None):
@@ -84,12 +86,16 @@ class ConfigurationManager:
         Args:
             config_path: Path to configuration JSON file. If None, uses default path.
         """
-        self.config_path = config_path or "backend/config/isl_modules.json"
+        if config_path is None:
+            from app.config import settings
+            config_path = settings.ISL_CONFIG_PATH
+        self.config_path = config_path
         self.config: ISLModulesConfig = self._load_config()
         
     def _load_config(self) -> ISLModulesConfig:
         """Load configuration from file or environment variables."""
-        config_dict = self.DEFAULT_CONFIG.copy()
+        import copy
+        config_dict = copy.deepcopy(self.DEFAULT_CONFIG)
         
         # Try to load from environment variable first
         env_config = os.environ.get("ISL_MODULE_CONFIG")
@@ -130,14 +136,16 @@ class ConfigurationManager:
         """Convert dictionary to ISLModulesConfig dataclass."""
         modules = {}
         for module_name, module_data in config_dict.get("modules", {}).items():
-            modules[module_name] = ModuleConfig(**module_data)
+            allowed = {k: v for k, v in module_data.items() if k in ModuleConfig.__dataclass_fields__}
+            modules[module_name] = ModuleConfig(**allowed)
         
         return ISLModulesConfig(
             modules=modules,
             prediction_strategy=config_dict.get("prediction_strategy", "priority"),
             enable_parallel_execution=config_dict.get("enable_parallel_execution", False),
             performance_monitoring=config_dict.get("performance_monitoring", True),
-            fallback_to_existing_lstm=config_dict.get("fallback_to_existing_lstm", True)
+            fallback_to_existing_lstm=config_dict.get("fallback_to_existing_lstm", True),
+            require_face_detection=config_dict.get("require_face_detection", False),
         )
     
     def is_module_enabled(self, module_name: str) -> bool:

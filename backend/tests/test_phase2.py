@@ -2,77 +2,62 @@
 Tests for Phase 2 — Profile, Text-to-Sign, Sign Demos, AR Landmarks
 """
 
-import pytest
 
 
 # ─── Profile Tests ────────────────────────────────────────────────
 
 class TestProfile:
 
-    def test_create_profile(self, client):
-        """Create a profile with all fields."""
-        response = client.post("/api/profile", json={
-            "sessionId": "test-profile-1",
+    def test_update_profile(self, auth_client):
+        response = auth_client.post("/api/profile", json={
             "name": "Ravi Kumar",
-            "email": "ravi@example.com",
-            "phone": "+91 9876543210",
+            "email": "Ravi@Example.com",
+            "phone": "+91 98765 00001",
             "preferred_language": "en",
         })
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Ravi Kumar"
         assert data["email"] == "ravi@example.com"
-        assert data["preferred_language"] == "en"
-        assert "Welcome" in data["welcome_message"]
+        assert data["phone"] == "+919876500001"
         assert "Ravi Kumar" in data["welcome_message"]
         assert len(data["welcome_sign_data"]) > 0
 
-    def test_create_profile_hindi(self, client):
-        """Profile with Hindi preference gets Hindi welcome."""
-        response = client.post("/api/profile", json={
-            "sessionId": "test-profile-hi",
-            "name": "रवि",
-            "email": "ravi@example.com",
-            "preferred_language": "hi",
+    def test_phone_change_keeps_session_valid(self, auth_client):
+        """Tokens are bound to user_id, so changing the phone must not log the user out."""
+        auth_client.post("/api/profile", json={"name": "A", "email": "a1@example.com", "phone": "9123456780"})
+        assert auth_client.get("/api/auth/me").status_code == 200
+
+    def test_update_profile_hindi(self, auth_client):
+        response = auth_client.post("/api/profile", json={
+            "name": "रवि", "email": "ravi.hi@example.com", "preferred_language": "hi",
         })
         assert response.status_code == 200
-        data = response.json()
-        assert "स्वागत" in data["welcome_message"]
+        assert "स्वागत" in response.json()["welcome_message"]
 
-    def test_get_profile(self, client):
-        """Create then retrieve a profile."""
-        client.post("/api/profile", json={
-            "sessionId": "test-profile-get",
-            "name": "Test User",
-            "email": "test@example.com",
-            "preferred_language": "en",
-        })
-        response = client.get("/api/profile/test-profile-get")
+    def test_get_profile(self, auth_client):
+        response = auth_client.get(f"/api/profile/{auth_client.user_id}")
         assert response.status_code == 200
         assert response.json()["name"] == "Test User"
 
-    def test_get_profile_not_found(self, client):
-        """Getting a non-existent profile returns 404."""
-        response = client.get("/api/profile/nonexistent-user")
-        assert response.status_code == 404
+    def test_get_other_profile_forbidden(self, auth_client):
+        assert auth_client.get("/api/profile/nonexistent-user").status_code == 403
 
-    def test_create_profile_missing_name(self, client):
-        """Profile without name should fail validation."""
-        response = client.post("/api/profile", json={
-            "sessionId": "test-no-name",
-            "name": "",
-            "email": "test@example.com",
-        })
-        assert response.status_code == 422  # Pydantic validation error
+    def test_update_profile_missing_name(self, auth_client):
+        response = auth_client.post("/api/profile", json={"name": "", "email": "test@example.com"})
+        assert response.status_code == 422
 
-    def test_create_profile_invalid_email(self, client):
-        """Profile with invalid email should return 400."""
-        response = client.post("/api/profile", json={
-            "sessionId": "test-bad-email",
-            "name": "Test",
-            "email": "not-an-email",
-        })
+    def test_update_profile_invalid_email(self, auth_client):
+        response = auth_client.post("/api/profile", json={"name": "Test", "email": "not-an-email"})
+        assert response.status_code == 422
+
+    def test_duplicate_phone_rejected(self, client):
+        from tests.conftest import register
+        other = register(client, name="Other")
+        me = register(client, name="Me")  # client is now logged in as "Me"
+        response = client.post("/api/profile", json={"name": "Me", "email": "me2@example.com", "phone": other["phone"]})
         assert response.status_code == 400
+        assert me["sessionId"] != other["sessionId"]
 
 
 # ─── Text to Sign Tests ──────────────────────────────────────────
@@ -126,7 +111,8 @@ class TestTextToSign:
         data = response.json()
         for word_data in data["words"]:
             if word_data["found"]:
-                assert word_data["gif_url"] != ""
+                # gif_url is empty until the media file is added under backend/static
+                assert isinstance(word_data["gif_url"], str)
                 assert word_data["description"] != ""
 
     def test_text_to_sign_empty(self, client):
@@ -137,15 +123,19 @@ class TestTextToSign:
         })
         assert response.status_code == 422  # Pydantic min_length validation
 
-    def test_text_to_sign_no_matches(self, client):
-        """Text with no vocabulary matches returns empty words list."""
-        response = client.post("/api/text-to-sign", json={
-            "text": "xyzabc qwerty",
-            "language": "en",
-        })
-        assert response.status_code == 200
-        data = response.json()
+    def test_text_to_sign_unknown_words_are_fingerspelled(self, client):
+        """Unknown English words fall back to finger-spelling letter by letter."""
+        data = client.post("/api/text-to-sign", json={"text": "xyz", "language": "en"}).json()
+        assert [w["word"] for w in data["words"]] == ["x", "y", "z"]
+
+    def test_text_to_sign_multiword_phrase(self, client):
+        data = client.post("/api/text-to-sign", json={"text": "How are you?", "language": "en"}).json()
+        assert [w["word"] for w in data["words"]] == ["how_are_you"]
+
+    def test_text_to_sign_unknown_hindi_not_spelled_in_english(self, client):
+        data = client.post("/api/text-to-sign", json={"text": "किताब", "language": "hi"}).json()
         assert data["matched_words"] == 0
+        assert data["unmatched_words"] == ["किताब"]
 
 
 # ─── Sign Demo Tests ─────────────────────────────────────────────
@@ -158,7 +148,7 @@ class TestSignDemo:
         assert response.status_code == 200
         data = response.json()
         assert data["word"] == "hello"
-        assert data["gif_url"] != ""
+        assert isinstance(data["gif_url"], str)
         assert data["description"] != ""
         assert len(data["tips"]) > 0
 
@@ -179,32 +169,20 @@ class TestSignDemo:
 
 class TestARLandmarks:
 
-    def test_ar_landmarks_valid(self, client, fake_frame):
-        """AR landmarks should return pose data."""
-        response = client.post("/api/ar/landmarks", json={
-            "sessionId": "test-ar-1",
-            "frame": fake_frame,
-        })
+    def test_ar_landmarks_requires_auth(self, client, fake_frame):
+        assert client.post("/api/ar/landmarks", json={"frame": fake_frame}).status_code == 401
+
+    def test_ar_landmarks_valid(self, auth_client, fake_frame):
+        response = auth_client.post("/api/ar/landmarks", json={"frame": fake_frame})
         assert response.status_code == 200
         data = response.json()
-        assert "pose_landmarks" in data
-        assert "left_hand_landmarks" in data
-        assert "right_hand_landmarks" in data
-        assert "face_detected" in data
-        assert "gesture_hint" in data
+        assert {"pose_landmarks", "left_hand_landmarks", "right_hand_landmarks",
+                "face_detected", "gesture_hint", "prediction"} <= data.keys()
 
-    def test_ar_landmarks_missing_session(self, client, fake_frame):
-        """Missing session ID should return 400."""
-        response = client.post("/api/ar/landmarks", json={
-            "sessionId": "",
-            "frame": fake_frame,
-        })
-        assert response.status_code == 400
+    def test_ar_landmarks_foreign_session(self, auth_client, fake_frame):
+        response = auth_client.post("/api/ar/landmarks", json={"sessionId": "other", "frame": fake_frame})
+        assert response.status_code == 403
 
-    def test_ar_landmarks_invalid_frame(self, client):
-        """Invalid base64 frame should return 400."""
-        response = client.post("/api/ar/landmarks", json={
-            "sessionId": "test-ar-2",
-            "frame": "not-valid-base64!!!",
-        })
+    def test_ar_landmarks_invalid_frame(self, auth_client):
+        response = auth_client.post("/api/ar/landmarks", json={"frame": "not-valid-base64!!!"})
         assert response.status_code == 400

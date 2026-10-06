@@ -6,18 +6,10 @@ Tests the complete flow from application startup through prediction.
 
 import pytest
 from fastapi.testclient import TestClient
+
 from app.main import app
-from ml.inference import (
-    are_isl_modules_initialized,
-    get_isl_modules_status,
-    is_model_loaded,
-    initialize_isl_modules
-)
-from ml.vocabulary import (
-    get_unified_vocabulary,
-    get_word_by_module_index,
-    get_display_name
-)
+from ml.inference import are_isl_modules_initialized, get_isl_modules_status, initialize_isl_modules
+from ml.vocabulary import get_display_name, get_unified_vocabulary, get_word_by_module_index
 
 
 @pytest.fixture(scope="module")
@@ -111,13 +103,15 @@ def test_vocabulary_manager_has_all_module_vocabularies():
     assert translation_word != "unknown", "Translation module should map index 0 to a word"
 
 
-def test_api_route_supports_module_details(client):
+def test_api_route_supports_module_details(auth_client):
+    client = auth_client
     """
     Test that /api/recognize-frame endpoint supports module_details parameter.
     """
     # Create a simple test frame (1x1 black pixel as base64 JPEG)
     import base64
     import io
+
     from PIL import Image
     
     # Create a small test image
@@ -131,7 +125,6 @@ def test_api_route_supports_module_details(client):
     response = client.post(
         "/api/recognize-frame",
         json={
-            "sessionId": "test-session-e2e",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )
@@ -147,7 +140,6 @@ def test_api_route_supports_module_details(client):
     response = client.post(
         "/api/recognize-frame?return_module_details=true",
         json={
-            "sessionId": "test-session-e2e-2",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )
@@ -183,7 +175,8 @@ def test_inference_engine_uses_modules_based_on_configuration():
                 f"Disabled module {module_name} should not be in enabled_modules list"
 
 
-def test_complete_end_to_end_flow_with_all_modules_enabled(client):
+def test_complete_end_to_end_flow_with_all_modules_enabled(auth_client):
+    client = auth_client
     """
     Test complete end-to-end flow:
     1. Application starts and initializes all components
@@ -204,6 +197,7 @@ def test_complete_end_to_end_flow_with_all_modules_enabled(client):
     # Step 3: Process a frame
     import base64
     import io
+
     from PIL import Image
     
     img = Image.new('RGB', (640, 480), color='blue')
@@ -215,7 +209,6 @@ def test_complete_end_to_end_flow_with_all_modules_enabled(client):
     frame_response = client.post(
         "/api/recognize-frame?return_module_details=true",
         json={
-            "sessionId": "test-e2e-complete",
             "frame": f"data:image/jpeg;base64,{img_base64}"
         }
     )

@@ -40,14 +40,26 @@ backend/users_db.json
 backend/users_db.json.bak
 backend/test_out.txt
 backend/test_output.txt
-backend/signvista.db
-backend/*.db
-backend/*.log
+
+# Local data / secrets (never commit user data)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+backend/users_db.json*
+backend/.dev_secret_key
+
+# Logs & scratch output
+*.log
 backend/uvicorn_*.txt
-backend/backend.log
+backend/test_out*.txt
+build_output.log
 backend/ws_test.py
 backend/versions.txt
+
+# Stray directories created by old relative paths
 backend/backend/
+ISL-Unified-Project/config/yolo/*.weights
 
 # IDE
 .kiro/

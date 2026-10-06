@@ -5,12 +5,12 @@ Tests the MediaPipe Hands-based hand landmark extraction
 and FNN gesture classification.
 """
 
+import cv2
 import numpy as np
 import pytest
-import cv2
 
-from ml.model_loader import ModelLoader
 from ml.config_manager import ConfigurationManager
+from ml.model_loader import ModelLoader
 from ml.modules.detection import DetectionModule
 
 
@@ -82,7 +82,6 @@ class TestDetectionModule:
         """Test that detection module initializes correctly."""
         assert detection_module is not None
         assert detection_module.model is not None
-        assert detection_module.hands is not None
         assert 0.0 <= detection_module.confidence_threshold <= 1.0
     
     def test_extract_hand_landmarks_with_hands(self, detection_module, test_frame):

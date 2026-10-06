@@ -1,74 +1,73 @@
 """
 SignVista Backend — FastAPI Application
 
-Main entry point. Initializes the ML model on startup,
-configures CORS, and mounts all route routers.
-
-Run with: uvicorn app.main:app --reload
+Run with: uvicorn app.main:app --reload   (from the backend/ directory)
 """
 
 import logging
+import os
+import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.config import settings
+from app.config import settings as app_settings
+from app.migrations import run_migrations
 from app.schemas import HealthResponse
 from app.session_store import get_active_session_count
-from ml.inference import initialize_model, is_model_loaded, initialize_isl_modules, are_isl_modules_initialized, get_isl_modules_status
+from ml.inference import (
+    are_isl_modules_initialized,
+    get_isl_modules_status,
+    initialize_isl_modules,
+    initialize_model,
+    is_model_loaded,
+    warmup,
+)
+from ml.sign_demos import STATIC_DIR
 from ml.vocabulary import NUM_CLASSES
 
-from app.database import engine
-from app import models
-
-# Ensure all database tables are created.
-models.Base.metadata.create_all(bind=engine)
-
-# ─── Logging Setup ────────────────────────────────────────────────
-
 logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    level=logging.DEBUG if app_settings.DEBUG else logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%H:%M:%S",
 )
+# Third-party libraries are very chatty at DEBUG
+for noisy in ("asyncio", "absl", "h5py", "PIL", "matplotlib", "urllib3", "multipart"):
+    logging.getLogger(noisy).setLevel(logging.WARNING)
 logger = logging.getLogger("signvista")
+
+MAX_REQUEST_BYTES = 3 * 1024 * 1024
 
 
 # ─── Lifespan (startup/shutdown) ──────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load ML model on startup, cleanup on shutdown."""
     logger.info("=" * 60)
     logger.info("🚀 SignVista Backend starting...")
-    logger.info(f"   Environment: {settings.ENV}")
-    logger.info(f"   CORS origins: {settings.CORS_ORIGINS}")
-    logger.info(f"   Model path: {settings.MODEL_PATH}")
-    logger.info(f"   Confidence threshold: {settings.CONFIDENCE_THRESHOLD}")
-    logger.info(f"   Buffer size: {settings.BUFFER_SIZE} frames")
+    logger.info(f"   Environment: {app_settings.ENV}")
+    logger.info(f"   CORS origins: {app_settings.CORS_ORIGINS}")
+    logger.info(f"   Database: {app_settings.DATABASE_URL.split('///')[0]}///…")
     logger.info("=" * 60)
 
-    # Load ML model
-    initialize_model()
+    logger.info("📦 Applying database migrations...")
+    run_migrations()
 
-    if is_model_loaded():
-        logger.info("✅ ML model loaded — real predictions active")
-    else:
-        logger.warning("⚠️ ML model NOT loaded — mock predictions active")
-    
-    # Load ISL Unified modules
-    logger.info("📦 Initializing ISL Unified modules...")
+    initialize_model()
     initialize_isl_modules()
-    
-    if are_isl_modules_initialized():
-        logger.info("✅ ISL modules initialized — multi-module support active")
+    if are_isl_modules_initialized() and is_model_loaded():
+        logger.info("✅ Sign recognition models loaded")
     else:
-        logger.warning("⚠️ ISL modules NOT initialized — using fallback LSTM only")
+        logger.warning("⚠️ No sign recognition model loaded — recognition endpoints will report 'no_model'")
+
+    # Warm MediaPipe/TensorFlow in the background so startup stays fast
+    if os.getenv("SKIP_ML_WARMUP", "").lower() not in ("1", "true"):
+        threading.Thread(target=warmup, name="ml-warmup", daemon=True).start()
 
     yield
-
-    # Cleanup
     logger.info("🛑 SignVista Backend shutting down...")
 
 
@@ -81,89 +80,105 @@ app = FastAPI(
         "Real-time translation, interactive learning with proficiency tracking, "
         "and gamified challenges."
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
-    docs_url="/docs",      # Swagger UI
-    redoc_url="/redoc",    # ReDoc
+    docs_url="/docs" if app_settings.DEBUG else None,
+    redoc_url="/redoc" if app_settings.DEBUG else None,
+    openapi_url="/openapi.json" if app_settings.DEBUG else None,
 )
 
 
-# ─── CORS Middleware ──────────────────────────────────────────────
+# ─── Middleware ───────────────────────────────────────────────────
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=app_settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def security_headers_and_size_limit(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > MAX_REQUEST_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if not app_settings.DEBUG:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled error on {request.method} {request.url.path}")
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # ─── Health Check ─────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check():
-    """
-    Health check endpoint.
-    Returns server status, model state, active sessions, and ISL module status.
-    """
+def health_check():
     return HealthResponse(
         status="ok",
         model_loaded=is_model_loaded(),
         active_sessions=get_active_session_count(),
         vocabulary_size=NUM_CLASSES,
-        version="1.0.0",
+        version="1.1.0",
         isl_modules=get_isl_modules_status(),
     )
 
 
-# ─── Mount Route Routers ─────────────────────────────────────────
+# ─── Routers ──────────────────────────────────────────────────────
 
-from app.routes import translate, learn, game, stats, vocabulary
-from app.routes import profile, text_to_sign, ar, community, auth
-from app.routes import dictionary, progress, history, achievements, dashboard, chat
-from app.routes import notifications, settings as settings_router
+from app.routes import (  # noqa: E402  # noqa: E402  # noqa: E402  # noqa: E402
+    achievements,
+    ar,
+    auth,
+    chat,
+    community,
+    dashboard,
+    dictionary,
+    game,
+    history,
+    learn,
+    notifications,
+    profile,
+    progress,
+    stats,
+    text_to_sign,
+    translate,
+    vocabulary,
+)
+from app.routes import settings as settings_router
 
-# Auth
-app.include_router(auth.router)
+for router_module in (
+    auth, translate, learn, game, stats, vocabulary,
+    profile, text_to_sign, ar,
+    dictionary, progress, history, achievements, dashboard, community, chat,
+    notifications, settings_router,
+):
+    app.include_router(router_module.router)
 
-# Phase 1
-app.include_router(translate.router)
-app.include_router(learn.router)
-app.include_router(game.router)
-app.include_router(stats.router)
-app.include_router(vocabulary.router)
+if app_settings.ENABLE_DEBUG_ROUTES:
+    from app.routes import debug  # noqa: E402
+    app.include_router(debug.router)
+    logger.warning("⚠️ Debug routes enabled (ENABLE_DEBUG_ROUTES=true)")
 
-# Phase 2 — Dashboard features
-app.include_router(profile.router)
-app.include_router(text_to_sign.router)
-app.include_router(ar.router)
+# Sign demonstration media (GIFs) — see backend/static/assets/signs/README.md
+os.makedirs(os.path.join(STATIC_DIR, "assets"), exist_ok=True)
+app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
-# Phase 3 — Learning & Gamification
-app.include_router(dictionary.router)
-app.include_router(progress.router)
-app.include_router(history.router)
-app.include_router(achievements.router)
-app.include_router(dashboard.router)
-app.include_router(community.router)
-app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
-app.include_router(notifications.router)
-app.include_router(settings_router.router)
-
-
-# ─── Root Redirect ────────────────────────────────────────────────
 
 @app.get("/", tags=["System"])
-async def root():
-    """Root endpoint — redirects to docs."""
+def root():
     return {
         "message": "🖐️ SignVista API — Indian Sign Language Recognition",
-        "docs": "/docs",
+        "docs": "/docs" if app_settings.DEBUG else None,
         "health": "/health",
-        "version": "1.0.0",
+        "version": "1.1.0",
     }
-
-# Debug routes (development only)
-if settings.DEBUG:
-    from app.routes import debug
-    app.include_router(debug.router)

@@ -1,15 +1,14 @@
 """Tests for vocabulary manager multi-module support."""
 
-import pytest
 from ml.vocabulary import (
-    get_word_by_module_index,
-    get_display_name,
-    get_unified_vocabulary,
-    resolve_vocabulary_conflict,
-    register_module_vocabulary,
     DETECTION_VOCAB,
     RECOGNITION_VOCAB,
     TRANSLATION_VOCAB,
+    get_display_name,
+    get_unified_vocabulary,
+    get_word_by_module_index,
+    register_module_vocabulary,
+    resolve_vocabulary_conflict,
 )
 
 

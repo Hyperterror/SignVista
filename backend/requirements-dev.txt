@@ -1,0 +1,8 @@
+-r requirements.txt
+
+pytest~=9.0
+httpx~=0.28
+hypothesis~=6.151
+pillow~=12.1           # used by integration tests to build images
+websockets~=16.0       # WebSocket client for end-to-end checks
+ruff~=0.16

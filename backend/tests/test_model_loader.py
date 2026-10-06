@@ -5,11 +5,13 @@ Tests both unit test cases and property-based tests for model loading,
 validation, and GPU acceleration.
 """
 
-import pytest
-import numpy as np
 import os
-from unittest.mock import Mock, patch, MagicMock
-from backend.ml.model_loader import ModelLoader
+from unittest.mock import Mock, patch
+
+import numpy as np
+import pytest
+
+from ml.model_loader import ModelLoader
 
 
 class TestModelLoaderUnit:
@@ -38,7 +40,7 @@ class TestModelLoaderUnit:
         info = model_loader.get_model_info("detection")
         assert info == {"loaded": False}
     
-    @patch('backend.ml.model_loader._import_tensorflow')
+    @patch('ml.model_loader._import_tensorflow')
     def test_check_gpu_availability_with_gpu(self, mock_tf_import, model_loader):
         """Test GPU detection when GPU is available."""
         mock_tf = Mock()
@@ -53,7 +55,7 @@ class TestModelLoaderUnit:
         assert model_loader._gpu_available is True
         mock_tf.config.list_physical_devices.assert_called_once_with('GPU')
     
-    @patch('backend.ml.model_loader._import_tensorflow')
+    @patch('ml.model_loader._import_tensorflow')
     def test_check_gpu_availability_without_gpu(self, mock_tf_import, model_loader):
         """Test GPU detection when no GPU is available."""
         mock_tf = Mock()
@@ -162,9 +164,9 @@ class TestModelLoaderUnit:
         
         assert result is False
     
-    @patch('backend.ml.model_loader.ModelLoader.load_detection_model')
-    @patch('backend.ml.model_loader.ModelLoader.load_recognition_model')
-    @patch('backend.ml.model_loader.ModelLoader.load_translation_model')
+    @patch('ml.model_loader.ModelLoader.load_detection_model')
+    @patch('ml.model_loader.ModelLoader.load_recognition_model')
+    @patch('ml.model_loader.ModelLoader.load_translation_model')
     def test_load_all_models_success(
         self, mock_trans, mock_recog, mock_detect, model_loader
     ):
@@ -184,7 +186,7 @@ class TestModelLoaderUnit:
         mock_recog.assert_called_once()
         mock_trans.assert_called_once()
     
-    @patch('backend.ml.model_loader.ModelLoader.load_detection_model')
+    @patch('ml.model_loader.ModelLoader.load_detection_model')
     def test_load_all_models_partial_failure(self, mock_detect, model_loader):
         """Test load_all_models continues when some models fail."""
         mock_detect.return_value = None  # Simulate failure
@@ -214,22 +216,31 @@ class TestModelLoaderUnit:
         assert status["gpu_available"] is False
 
 
+from app.config import REPO_ROOT
+from app.config import settings as _settings
+
+YOLO_DIR = os.path.join(str(REPO_ROOT), "ISL-Unified-Project", "config", "yolo")
+
+
+MODELS_DIR = _settings.ISL_MODELS_DIR
+
+
 class TestModelLoaderIntegration:
     """Integration tests that require actual model files."""
     
     @pytest.fixture
     def model_loader(self):
         """Create ModelLoader instance for integration testing."""
-        return ModelLoader(base_path="ISL-Unified-Project/models/")
+        return ModelLoader(base_path=MODELS_DIR)
     
     @pytest.mark.skipif(
-        not os.path.exists("ISL-Unified-Project/models/detection/gesture_classifier.h5"),
+        not os.path.exists(os.path.join(MODELS_DIR, "detection", "gesture_classifier.h5")),
         reason="Detection model file not available"
     )
     def test_load_detection_model_real(self, model_loader):
         """Test loading actual detection model if available."""
         model = model_loader.load_detection_model()
-        
+        assert model is not None, "detection model file exists but failed to load"
         if model is not None:
             assert "detection" in model_loader.models
             info = model_loader.get_model_info("detection")
@@ -238,13 +249,13 @@ class TestModelLoaderIntegration:
             assert info["type"] == "FNN"
     
     @pytest.mark.skipif(
-        not os.path.exists("ISL-Unified-Project/models/recognition/lstm_word_model.hdf5"),
+        not os.path.exists(os.path.join(MODELS_DIR, "recognition", "lstm_word_model.hdf5")),
         reason="Recognition model file not available"
     )
     def test_load_recognition_model_real(self, model_loader):
         """Test loading actual recognition model if available."""
         model = model_loader.load_recognition_model()
-        
+        assert model is not None, "recognition weights exist but failed to load"
         if model is not None:
             assert "recognition" in model_loader.models
             info = model_loader.get_model_info("recognition")
@@ -253,7 +264,7 @@ class TestModelLoaderIntegration:
             assert info["type"] == "LSTM"
     
     @pytest.mark.skipif(
-        not os.path.exists("ISL-Unified-Project/models/translation/squeezenet_model"),
+        not os.path.exists(os.path.join(MODELS_DIR, "translation", "squeezenet_model")),
         reason="Translation model file not available"
     )
     def test_load_translation_model_real(self, model_loader):
@@ -268,8 +279,8 @@ class TestModelLoaderIntegration:
             assert info["type"] == "SqueezeNet"
     
     @pytest.mark.skipif(
-        not (os.path.exists("ISL-Unified-Project/config/yolo/cross-hands.cfg") and
-             os.path.exists("ISL-Unified-Project/config/yolo/cross-hands.weights")),
+        not (os.path.exists(os.path.join(YOLO_DIR, "cross-hands.cfg")) and
+             os.path.exists(os.path.join(YOLO_DIR, "cross-hands.weights"))),
         reason="YOLO config or weights not available"
     )
     def test_load_yolo_detector_real(self, model_loader):

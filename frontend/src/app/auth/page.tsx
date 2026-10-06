@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { Mail, Lock, User, ArrowRight, Chrome, Loader2, Sparkles, Phone } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/app/utils/api';
 import { toast } from 'sonner';
@@ -54,8 +54,32 @@ export default function AuthPage() {
         setIsLogin(!isLogin);
     };
 
+    // Only allow same-site relative redirects (avoid open redirects)
+    const nextPath = (): string => {
+        if (typeof window === 'undefined') return '/dashboard';
+        const next = new URLSearchParams(window.location.search).get('next') || '';
+        return next.startsWith('/') && !next.startsWith('//') && next !== '/auth' ? next : '/dashboard';
+    };
+
+    const validate = (): string | null => {
+        const digits = phone.replace(/[\s\-().]/g, '');
+        if (!/^\+?\d{10,15}$/.test(digits)) return 'Enter a valid phone number (10-15 digits).';
+        if (!isLogin) {
+            if (!name.trim()) return 'Please enter your name.';
+            if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) return 'Enter a valid email address.';
+            if (password.length < 8) return 'Password must be at least 8 characters.';
+            if (new TextEncoder().encode(password).length > 72) return 'Password is too long.';
+        }
+        return null;
+    };
+
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
+        const problem = validate();
+        if (problem) {
+            toast.error(problem);
+            return;
+        }
         setIsSubmitting(true);
 
         try {
@@ -63,7 +87,7 @@ export default function AuthPage() {
                 const result = await api.login(phone, password);
                 if (result.status === 'ok') {
                     toast.success(`Welcome back, ${result.user_name}!`);
-                    setTimeout(() => router.push('/'), 1000);
+                    setTimeout(() => router.replace(nextPath()), 600);
                 }
             } else {
                 const result = await api.register({
@@ -75,7 +99,7 @@ export default function AuthPage() {
                 });
                 if (result.status === 'ok') {
                     toast.success(`Welcome to SignVista, ${result.user_name}!`);
-                    setTimeout(() => router.push('/'), 1000);
+                    setTimeout(() => router.replace(nextPath()), 600);
                 }
             }
         } catch (error: any) {
@@ -118,7 +142,7 @@ export default function AuthPage() {
                         <div className="w-full max-w-[320px] space-y-8">
                             <div className="text-center space-y-2">
                                 <h2 className="text-4xl font-black text-gray-900 tracking-tight">Login</h2>
-                                <p className="text-gray-500 text-sm font-medium italic">"Embark on your ISL journey"</p>
+                                <p className="text-gray-500 text-sm font-medium italic">&ldquo;Embark on your ISL journey&rdquo;</p>
                             </div>
 
                             <form onSubmit={handleAuth} className="space-y-4">
@@ -138,6 +162,7 @@ export default function AuthPage() {
                                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-[#105F68] transition-colors" />
                                         <input
                                             type="password"
+                                            autoComplete="current-password"
                                             required
                                             placeholder="Password"
                                             className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#105F68]/50 focus:bg-white transition-all text-gray-900 font-medium"
@@ -157,19 +182,6 @@ export default function AuthPage() {
                             </form>
 
                             <div className="space-y-6">
-                                <div className="relative flex items-center justify-center">
-                                    <div className="absolute inset-0 border-t border-gray-200 w-full" />
-                                    <span className="relative bg-white px-4 text-[10px] uppercase font-black text-gray-400 tracking-[0.2em]">Social Access</span>
-                                </div>
-
-                                <button
-                                    onClick={() => toast.info("Google access coming soon!")}
-                                    type="button"
-                                    className="w-full py-3.5 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-100 transition-all text-gray-600 font-bold text-sm"
-                                >
-                                    <Chrome className="w-5 h-5 text-[#4285F4]" /> Sign in with Google
-                                </button>
-
                                 <p className="text-center text-gray-500 text-sm font-bold">
                                     New here?
                                     <button onClick={toggleAuth} type="button" className="ml-2 text-[#105F68] font-black hover:underline underline-offset-4 tracking-tight">Create Account</button>
@@ -186,7 +198,7 @@ export default function AuthPage() {
                         <div className="w-full max-w-[340px] space-y-6">
                             <div className="text-center space-y-2">
                                 <h2 className="text-3xl font-black text-white tracking-tight">Join Vista</h2>
-                                <p className="text-gray-400 text-xs font-medium italic">"Create your digital ISL persona"</p>
+                                <p className="text-gray-400 text-xs font-medium italic">&ldquo;Create your digital ISL persona&rdquo;</p>
                             </div>
 
                             <form onSubmit={handleAuth} className="space-y-3">
@@ -237,6 +249,9 @@ export default function AuthPage() {
                                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-[#63C1BB] transition-colors" />
                                         <input
                                             type="password"
+                                            minLength={8}
+                                            maxLength={72}
+                                            autoComplete="new-password"
                                             required
                                             placeholder="Password"
                                             className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-[#63C1BB]/50 focus:bg-white/10 transition-all text-white font-medium text-sm"

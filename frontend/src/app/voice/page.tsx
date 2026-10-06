@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { Mic, MicOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
+import { SignMedia } from '../components/SignMedia';
 
 interface SignWord {
     word: string;
@@ -23,6 +24,7 @@ export default function VoiceToSignPage() {
     const micRef = useRef<HTMLDivElement>(null);
     const glowRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
+    const [speechLang, setSpeechLang] = useState<'en-IN' | 'hi-IN'>('en-IN');
 
     useEffect(() => {
         gsap.fromTo('.voice-container', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: 'back.out(1.7)' });
@@ -36,16 +38,22 @@ export default function VoiceToSignPage() {
             recognitionRef.current.lang = 'en-IN'; // Default to Indian English
 
             recognitionRef.current.onresult = (event: any) => {
-                let currentTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    currentTranscript += event.results[i][0].transcript;
+                // Rebuild from all results so earlier finalized phrases aren't lost
+                let fullTranscript = '';
+                for (let i = 0; i < event.results.length; ++i) {
+                    fullTranscript += event.results[i][0].transcript;
                 }
-                setTranscript(currentTranscript);
+                setTranscript(fullTranscript);
             };
 
             recognitionRef.current.onerror = (event: any) => {
-                console.error('Speech recognition error:', event.error);
-                toast.error('Speech recognition failed. Please check your microphone.');
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    toast.error('Microphone access was denied. Allow it in your browser settings.');
+                } else if (event.error === 'no-speech') {
+                    toast.info('No speech detected. Try again.');
+                } else if (event.error !== 'aborted') {
+                    toast.error('Speech recognition failed. Please check your microphone.');
+                }
                 setIsRecording(false);
                 setWaveformActive(false);
             };
@@ -59,19 +67,13 @@ export default function VoiceToSignPage() {
         }
 
         return () => {
-            if (recognitionRef.current) recognitionRef.current.stop();
+            if (recognitionRef.current) recognitionRef.current.abort();
         };
     }, []);
 
     useEffect(() => {
-        if (isRecording && glowRef.current) {
-            gsap.to(glowRef.current, { opacity: 1, scale: 1.1, duration: 1, ease: 'power1.inOut', yoyo: true, repeat: -1 });
-            const interval = setInterval(() => createParticle(), 200);
-            return () => clearInterval(interval);
-        } else if (glowRef.current) {
-            gsap.to(glowRef.current, { opacity: 0, scale: 1, duration: 0.5 });
-        }
-    }, [isRecording]);
+        if (recognitionRef.current) recognitionRef.current.lang = speechLang;
+    }, [speechLang]);
 
     const createParticle = () => {
         if (!micRef.current) return;
@@ -90,6 +92,16 @@ export default function VoiceToSignPage() {
             { x: Math.cos(angle) * distance - startX, y: Math.sin(angle) * distance - startY, opacity: 0, scale: 0, duration: 1.5, ease: 'power2.out', onComplete: () => particle.remove() }
         );
     };
+
+    useEffect(() => {
+        if (isRecording && glowRef.current) {
+            gsap.to(glowRef.current, { opacity: 1, scale: 1.1, duration: 1, ease: 'power1.inOut', yoyo: true, repeat: -1 });
+            const interval = setInterval(() => createParticle(), 200);
+            return () => clearInterval(interval);
+        } else if (glowRef.current) {
+            gsap.to(glowRef.current, { opacity: 0, scale: 1, duration: 0.5 });
+        }
+    }, [isRecording]);
 
     const toggleRecording = () => {
         if (isRecording) {
@@ -121,7 +133,7 @@ export default function VoiceToSignPage() {
 
         if (transcript.trim()) {
             try {
-                const response = await api.translateText(transcript);
+                const response = await api.translateText(transcript, speechLang === 'hi-IN' || /[\u0900-\u097F]/.test(transcript) ? 'hi' : 'en');
                 setOutputSigns(response.words);
 
                 if (response.matched_words > 0) {
@@ -146,7 +158,7 @@ export default function VoiceToSignPage() {
                 } else {
                     toast.warning('No matching ISL signs found');
                 }
-            } catch (error) {
+            } catch {
                 toast.error('Translation failed');
             }
         }
@@ -181,6 +193,19 @@ export default function VoiceToSignPage() {
                         />
 
                         <div className="flex flex-col items-center justify-center">
+                            <div className="flex gap-2 mb-6" role="group" aria-label="Speech language">
+                                {(['en-IN', 'hi-IN'] as const).map((l) => (
+                                    <button
+                                        key={l}
+                                        onClick={() => setSpeechLang(l)}
+                                        disabled={isRecording}
+                                        aria-pressed={speechLang === l}
+                                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 ${speechLang === l ? 'bg-[#105F68] text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+                                    >
+                                        {l === 'en-IN' ? 'English' : 'हिन्दी'}
+                                    </button>
+                                ))}
+                            </div>
                             <div ref={micRef} className="relative mb-8">
                                 <button
                                     onClick={toggleRecording}
@@ -229,7 +254,7 @@ export default function VoiceToSignPage() {
                                             </button>
                                         )}
                                     </div>
-                                    <p className="text-lg text-gray-700 dark:text-gray-300 italic">"{transcript}"</p>
+                                    <p className="text-lg text-gray-700 dark:text-gray-300 italic">&ldquo;{transcript}&rdquo;</p>
                                 </div>
                             )}
                         </div>
@@ -245,14 +270,10 @@ export default function VoiceToSignPage() {
                                     <div key={index} className={`voice-sign-${index} relative group w-full max-w-[180px]`}>
                                         <div className="relative aspect-video rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg border border-gray-100 dark:border-gray-700 hover:shadow-2xl transition-all duration-300">
                                             {sign.found ? (
-                                                <img
-                                                    src={`http://localhost:8001${sign.gif_url}`}
-                                                    alt={sign.display_name}
-                                                    className="w-full h-full object-cover"
-                                                />
+                                                <SignMedia gifUrl={sign.gif_url} label={sign.display_name || sign.word} className="w-full h-full" />
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-900">
-                                                    <span className="text-xs text-gray-400">"{sign.word}"</span>
+                                                    <span className="text-xs text-gray-400">&ldquo;{sign.word}&rdquo;</span>
                                                     <span className="text-[10px] text-gray-300">No Sign Found</span>
                                                 </div>
                                             )}

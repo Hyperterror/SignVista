@@ -5,16 +5,39 @@ These define the exact JSON contracts between Ayush's frontend and our backend.
 Ayush: Use these as your TypeScript interface reference.
 """
 
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PHONE_RE = re.compile(r"^\+?\d{10,15}$")
+
+
+def normalize_phone(value: str) -> str:
+    """Strip spaces, dashes, dots and parentheses from a phone number."""
+    return re.sub(r"[\s\-().]", "", value or "")
+
+
+def _validate_email(value: str) -> str:
+    value = (value or "").strip().lower()
+    if len(value) > 100 or not EMAIL_RE.match(value):
+        raise ValueError("A valid email address is required")
+    return value
+
+
+def _validate_phone(value: str) -> str:
+    value = normalize_phone(value)
+    if not PHONE_RE.match(value):
+        raise ValueError("Phone number must contain 10-15 digits")
+    return value
 
 
 # ─── Translate Mode ───────────────────────────────────────────────
 
 class RecognizeFrameRequest(BaseModel):
     """POST /api/recognize-frame — sent every 200ms from frontend camera."""
-    sessionId: str = Field(..., description="Unique session identifier")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
     frame: str = Field(..., description="Base64-encoded JPEG frame (with or without data URI prefix)")
 
 
@@ -31,7 +54,7 @@ class RecognizeFrameResponse(BaseModel):
 
 class LearnAttemptRequest(BaseModel):
     """POST /api/learn/attempt — practice a specific word."""
-    sessionId: str = Field(..., description="Unique session identifier")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
     targetWord: str = Field(..., description="The word the user is trying to sign")
     frame: str = Field(..., description="Base64-encoded JPEG frame")
 
@@ -51,8 +74,8 @@ class LearnAttemptResponse(BaseModel):
 
 class GameStartRequest(BaseModel):
     """POST /api/game/start — initialize a new game round."""
-    sessionId: str = Field(..., description="Unique session identifier")
-    duration: int = Field(30, description="Game duration in seconds (default 30)")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
+    duration: int = Field(30, ge=10, le=300, description="Game duration in seconds (10-300, default 30)")
 
 
 class GameStartResponse(BaseModel):
@@ -65,7 +88,7 @@ class GameStartResponse(BaseModel):
 
 class GameAttemptRequest(BaseModel):
     """POST /api/game/attempt — submit a sign during game."""
-    sessionId: str = Field(..., description="Unique session identifier")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
     gameId: str = Field(..., description="Game session ID from /game/start")
     frame: str = Field(..., description="Base64-encoded JPEG frame")
 
@@ -80,6 +103,9 @@ class GameAttemptResponse(BaseModel):
     multiplier: int = Field(1, description="Current streak multiplier")
     wordsCompleted: int = Field(0, description="Total words signed correctly this game")
     confidence: float = Field(0.0, description="Model confidence")
+    timeRemaining: float = Field(0.0, description="Seconds left in the game")
+    isActive: bool = Field(True, description="False once the game has ended")
+    buffer_status: str = Field("", description="Inference pipeline status for this frame")
 
 
 class GameResultResponse(BaseModel):
@@ -124,6 +150,7 @@ class WordInfo(BaseModel):
     display_name: str
     priority: int = Field(1, description="1 = core, 2 = extended")
     index: int = Field(0, description="Model label index")
+    recognizable: bool = Field(False, description="True if a loaded model can recognize this sign (practice/game ready)")
 
 
 class VocabularyResponse(BaseModel):
@@ -148,11 +175,34 @@ class HealthResponse(BaseModel):
 
 class ProfileCreateRequest(BaseModel):
     """POST /api/profile — register/update user profile."""
-    sessionId: str = Field(..., description="Unique session identifier")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
     name: str = Field(..., description="User's full name", min_length=1, max_length=100)
     email: str = Field(..., description="User's email address")
     phone: str = Field("", description="Phone number (optional)")
-    preferred_language: str = Field("en", description="'en' for English, 'hi' for Hindi")
+    preferred_language: Literal["en", "hi"] = Field("en", description="'en' for English, 'hi' for Hindi")
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name is required")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _validate_email(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return _validate_phone(v) if v and v.strip() else ""
+
+    @field_validator("preferred_language", mode="before")
+    @classmethod
+    def _lang(cls, v):
+        return v.lower() if isinstance(v, str) and v.lower() in ("en", "hi") else "en"
 
 
 class ProfileResponse(BaseModel):
@@ -211,7 +261,7 @@ class SignDemoResponse(BaseModel):
 
 class ARLandmarksRequest(BaseModel):
     """POST /api/ar/landmarks — extract landmarks for AR overlay."""
-    sessionId: str = Field(..., description="Unique session identifier")
+    sessionId: Optional[str] = Field(None, description="Deprecated: the session is the authenticated user")
     frame: str = Field(..., description="Base64-encoded JPEG frame")
 
 
@@ -320,6 +370,7 @@ class DashboardResponse(BaseModel):
     words_practiced: int
     words_mastered: int
     current_streak: int
+    longest_streak: int = 0
     recent_activity: List[ActivityEvent]
     total_achievements: int
     unlocked_achievements_count: int
@@ -342,6 +393,7 @@ class CommunityPost(BaseModel):
     content: str
     likes: int
     comments_count: int
+    liked_by_me: bool = False
     comments: List[Comment] = Field(default_factory=list)
     timestamp: float
     is_official: bool = False
@@ -349,18 +401,50 @@ class CommunityPost(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 class CreatePostRequest(BaseModel):
-    sessionId: str
-    content: str
-    tags: List[str] = Field(default_factory=list)
+    sessionId: Optional[str] = None  # Ignored — the author is the authenticated user
+    content: str = Field(..., min_length=1, max_length=2000)
+    tags: List[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("content")
+    @classmethod
+    def _content(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Post content cannot be empty")
+        return v
+
+    @field_validator("tags")
+    @classmethod
+    def _tags(cls, v: List[str]) -> List[str]:
+        cleaned = []
+        for t in v:
+            t = t.strip().lstrip("#")[:30]
+            if t and t not in cleaned:
+                cleaned.append(t)
+        return cleaned
 
 class LikeRequest(BaseModel):
-    sessionId: str
-    postId: str
+    sessionId: Optional[str] = None  # Ignored — the liker is the authenticated user
+    postId: str = Field(..., min_length=1, max_length=50)
+
+class CreateCommentRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("content")
+    @classmethod
+    def _content(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Comment cannot be empty")
+        return v
 
 class CommunityFeedResponse(BaseModel):
     posts: List[CommunityPost]
+    total: int = 0
+    has_more: bool = False
 
 class ActiveUser(BaseModel):
+    user_id: str = ""
     name: str
     initials: str
     is_online: bool = True
@@ -375,14 +459,63 @@ class AuthRegisterRequest(BaseModel):
     """POST /api/auth/register"""
     name: str = Field(..., min_length=1, max_length=100)
     email: str = Field(...)
-    phone: str = Field(..., min_length=10, max_length=15)
-    password: str = Field(..., min_length=6)
-    preferred_language: str = Field("en", description="'en' or 'hi'")
+    phone: str = Field(..., min_length=10, max_length=20)
+    password: str = Field(..., min_length=8, max_length=72)
+    preferred_language: Literal["en", "hi"] = Field("en", description="'en' or 'hi'")
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name is required")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _validate_email(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return _validate_phone(v)
+
+    @field_validator("password")
+    @classmethod
+    def _password(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password is too long (max 72 bytes)")
+        if not v.strip():
+            raise ValueError("Password cannot be blank")
+        return v
+
+    @field_validator("preferred_language", mode="before")
+    @classmethod
+    def _lang(cls, v):
+        return v.lower() if isinstance(v, str) and v.lower() in ("en", "hi") else "en"
 
 class AuthLoginRequest(BaseModel):
     """POST /api/auth/login"""
-    phone: str = Field(...)
-    password: str = Field(...)
+    phone: str = Field(..., min_length=1, max_length=20)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return normalize_phone(v)
+
+class WsTicketResponse(BaseModel):
+    ticket: str
+    expires_in: int
+
+class MeResponse(BaseModel):
+    sessionId: str
+    name: str
+    email: str
+    phone: str
+    preferred_language: str = "en"
+    created_at: Optional[float] = None
 
 class AuthResponse(BaseModel):
     """Authentication response payload."""
@@ -419,7 +552,7 @@ class UserSettingsResponse(BaseModel):
     updated_at: float
 
 class UserSettingsUpdate(BaseModel):
-    theme: Optional[str] = None
+    theme: Optional[Literal["light", "dark", "system"]] = None
     notifications_enabled: Optional[bool] = None
     sound_enabled: Optional[bool] = None
-    daily_goal_minutes: Optional[int] = None
+    daily_goal_minutes: Optional[int] = Field(None, ge=1, le=240)

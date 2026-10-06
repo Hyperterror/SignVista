@@ -1,0 +1,22 @@
+# Keep build contexts small and free of local data/secrets
+**/.git
+**/node_modules
+**/.next
+**/venv
+**/venv_native
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.hypothesis
+**/.env
+**/.env.*
+!**/.env.example
+**/*.db
+**/*.db-*
+**/*.log
+backend/users_db.json*
+backend/.dev_secret_key
+backend/tests
+backend/scripts
+.vscode
+ISL-Unified-Project/config/yolo/*.weights

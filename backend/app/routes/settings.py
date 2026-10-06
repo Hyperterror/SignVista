@@ -7,23 +7,23 @@ PUT /api/settings
 Manages user application preferences in the SQLite database.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
 import time
 
-from app.dependencies import get_current_user
-from app.database import get_db
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
 from app import models, schemas
+from app.database import get_db
+from app.dependencies import get_current_user, require_own_session
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
 
 @router.get("/settings/{session_id}", response_model=schemas.UserSettingsResponse)
-async def get_settings(session_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_settings(session_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Retrieve user settings."""
     # Ensure current user matches the requested session id (user_id)
-    if current_user["user_id"] != session_id:
-        raise HTTPException(status_code=403, detail="Unauthorized access to settings")
+    require_own_session(current_user, session_id)
 
     settings = db.query(models.UserSettings).filter(models.UserSettings.user_id == session_id).first()
     if not settings:
@@ -43,7 +43,7 @@ async def get_settings(session_id: str, current_user: models.User = Depends(get_
 
 
 @router.put("/settings", response_model=schemas.UserSettingsResponse)
-async def update_settings(request: schemas.UserSettingsUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_settings(request: schemas.UserSettingsUpdate, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update user settings."""
     settings = db.query(models.UserSettings).filter(models.UserSettings.user_id == current_user["user_id"]).first()
     if not settings:
